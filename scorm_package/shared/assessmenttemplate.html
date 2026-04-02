@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Final Assessment — Cloud Migration Strategy</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    var QUESTION_TYPE_CHOICE = "choice";
+    var QUESTION_TYPE_TF = "true-false";
+
+    function Question(id, text, type, answers, correctAnswer, objectiveId) {
+      this.Id = id;
+      this.Text = text;
+      this.Type = type;
+      this.Answers = answers;
+      this.CorrectAnswer = correctAnswer;
+      this.ObjectiveId = objectiveId;
+    }
+
+    function Test(questions) {
+      this.Questions = questions;
+    }
+    Test.prototype.AddQuestion = function(question) {
+      this.Questions[this.Questions.length] = question;
+    };
+
+    var test = new Test([]);
+  </script>
+
+  <!-- Load question banks from each module -->
+  <script src="../Module1/questions.js"></script>
+  <script src="../Module2/questions.js"></script>
+  <script src="../Module3/questions.js"></script>
+
+  <script>
+    var selectedAnswers = {};
+    var submitted = false;
+
+    function selectAnswer(questionId, answerIndex) {
+      if (submitted) return;
+      selectedAnswers[questionId] = answerIndex;
+
+      // Update visual state
+      var options = document.querySelectorAll('[data-question="' + questionId + '"]');
+      options.forEach(function(opt) {
+        opt.classList.remove("answer-option--selected");
+      });
+      var selected = document.querySelector('[data-question="' + questionId + '"][data-answer="' + answerIndex + '"]');
+      if (selected) selected.classList.add("answer-option--selected");
+
+      // Update progress
+      updateQuizProgress();
+    }
+
+    function updateQuizProgress() {
+      var answered = Object.keys(selectedAnswers).length;
+      var total = test.Questions.length;
+      var pct = Math.round((answered / total) * 100);
+      var fill = document.getElementById("quizProgressFill");
+      var label = document.getElementById("quizProgressLabel");
+      if (fill) fill.style.width = pct + "%";
+      if (label) label.textContent = answered + " of " + total + " answered";
+
+      // Enable submit if all answered
+      var btn = document.getElementById("submitBtn");
+      if (btn) btn.disabled = (answered < total);
+    }
+
+    function submitQuiz() {
+      if (submitted) return;
+      submitted = true;
+
+      var correctCount = 0;
+      var totalQuestions = test.Questions.length;
+
+      for (var i = 0; i < test.Questions.length; i++) {
+        var q = test.Questions[i];
+        var correctIdx = null;
+        var learnerIdx = selectedAnswers[q.Id];
+
+        for (var j = 0; j < q.Answers.length; j++) {
+          if (q.CorrectAnswer === q.Answers[j]) {
+            correctIdx = j;
+          }
+        }
+
+        var wasCorrect = (learnerIdx === correctIdx);
+        if (wasCorrect) correctCount++;
+
+        // Show correct/incorrect styling
+        var options = document.querySelectorAll('[data-question="' + q.Id + '"]');
+        options.forEach(function(opt) {
+          var idx = parseInt(opt.getAttribute("data-answer"));
+          opt.classList.remove("answer-option--selected");
+          if (idx === correctIdx) {
+            opt.classList.add("answer-option--correct");
+          } else if (idx === learnerIdx && !wasCorrect) {
+            opt.classList.add("answer-option--incorrect");
+          }
+          opt.style.cursor = "default";
+        });
+
+        // Report to parent (launchpage)
+        if (parent.RecordQuestion) {
+          parent.RecordQuestion(q.Id, q.Text, q.Type,
+            learnerIdx != null ? learnerIdx.toString() : "",
+            correctIdx != null ? correctIdx.toString() : "",
+            wasCorrect, q.ObjectiveId);
+        }
+      }
+
+      var score = Math.round(correctCount * 100 / totalQuestions);
+
+      // Report score to parent
+      if (parent.RecordTest) {
+        parent.RecordTest(score);
+      }
+
+      // Show results
+      showResults(score, correctCount, totalQuestions);
+    }
+
+    function showResults(score, correct, total) {
+      var testDiv = document.getElementById("quizContent");
+      var resultsDiv = document.getElementById("quizResults");
+
+      var statusClass = score >= 70 ? "quiz-results__status--pass" : "quiz-results__status--fail";
+      var statusText = score >= 70 ? "✓ Passed" : "✗ Not Passed";
+      var statusMsg = score >= 70
+        ? "Congratulations! You have demonstrated proficiency in cloud migration strategy."
+        : "You need 70% or higher to pass. Review the course material and try again.";
+
+      resultsDiv.innerHTML =
+        '<div class="quiz-results">' +
+          '<div class="quiz-results__score">' + score + '%</div>' +
+          '<div class="quiz-results__label">' + correct + ' of ' + total + ' correct</div>' +
+          '<span class="quiz-results__status ' + statusClass + '">' + statusText + '</span>' +
+          '<p style="margin-top:24px;color:#475569;font-size:15px;">' + statusMsg + '</p>' +
+        '</div>';
+      resultsDiv.style.display = "block";
+
+      // Scroll to results
+      resultsDiv.scrollIntoView({ behavior: "smooth" });
+    }
+
+    function renderQuiz() {
+      var container = document.getElementById("quizContent");
+      var html = "";
+      var letters = ["A", "B", "C", "D", "E"];
+
+      for (var i = 0; i < test.Questions.length; i++) {
+        var q = test.Questions[i];
+        html += '<div class="question-card">';
+        html += '  <div class="question-card__number">Question ' + (i + 1) + '</div>';
+        html += '  <div class="question-card__text">' + q.Text + '</div>';
+
+        if (q.Type === QUESTION_TYPE_CHOICE) {
+          for (var j = 0; j < q.Answers.length; j++) {
+            html += '<div class="answer-option" data-question="' + q.Id + '" data-answer="' + j + '" onclick="selectAnswer(\'' + q.Id + '\', ' + j + ')">';
+            html += '  <div class="answer-option__radio"></div>';
+            html += '  <div class="answer-option__label"><span class="answer-option__letter">' + letters[j] + '.</span> ' + q.Answers[j] + '</div>';
+            html += '</div>';
+          }
+        } else if (q.Type === QUESTION_TYPE_TF) {
+          html += '<div class="answer-option" data-question="' + q.Id + '" data-answer="0" onclick="selectAnswer(\'' + q.Id + '\', 0)">';
+          html += '  <div class="answer-option__radio"></div>';
+          html += '  <div class="answer-option__label">True</div>';
+          html += '</div>';
+          html += '<div class="answer-option" data-question="' + q.Id + '" data-answer="1" onclick="selectAnswer(\'' + q.Id + '\', 1)">';
+          html += '  <div class="answer-option__radio"></div>';
+          html += '  <div class="answer-option__label">False</div>';
+          html += '</div>';
+        }
+
+        html += '</div>';
+      }
+
+      container.innerHTML = html;
+    }
+
+    window.onload = function() {
+      renderQuiz();
+      updateQuizProgress();
+    };
+  </script>
+</head>
+<body>
+
+<div class="quiz">
+  <h1>Final Assessment</h1>
+  <p class="quiz__description">Test your knowledge of multi-cloud migration strategy. You need 70% or higher to pass.</p>
+
+  <div class="quiz__progress">
+    <span id="quizProgressLabel">0 of 0 answered</span>
+    <div class="quiz__progress-bar">
+      <div class="quiz__progress-fill" id="quizProgressFill" style="width: 0%"></div>
+    </div>
+  </div>
+
+  <div id="quizContent">
+    <!-- Questions rendered by JS -->
+  </div>
+
+  <div class="quiz__submit">
+    <button class="btn btn--primary" id="submitBtn" onclick="submitQuiz()" disabled style="padding: 12px 40px; font-size: 16px;">Submit Answers</button>
+  </div>
+
+  <div id="quizResults" style="display:none; margin-top: 32px;">
+    <!-- Results rendered by JS -->
+  </div>
+</div>
+
+</body>
+</html>

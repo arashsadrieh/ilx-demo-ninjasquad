@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Computing: Multi-Cloud Migration Strategy — GCP to AWS</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="scormfunctions.js"></script>
+</head>
+<body>
+
+  <!-- ===== Top Navbar ===== -->
+  <nav class="navbar">
+    <a href="#" class="navbar__brand">
+      <svg class="navbar__brand-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="28" height="28" rx="6" fill="#1a56db"/>
+        <path d="M8 20V10l6-4 6 4v10l-6-3-6 3z" fill="#fff" opacity="0.9"/>
+      </svg>
+      Cloud Migration: GCP → AWS
+    </a>
+    <div class="navbar__controls">
+      <span class="navbar__progress-label" id="progressLabel">0% Complete</span>
+      <div class="navbar__progress-bar">
+        <div class="navbar__progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+      <button class="navbar__btn" id="btnExit" onclick="exitCourse()">✕ Exit</button>
+    </div>
+  </nav>
+
+  <!-- ===== Main Layout ===== -->
+  <div class="app">
+
+    <!-- Sidebar / Table of Contents -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar__header">
+        <div class="sidebar__course-title">Multi-Cloud Migration Strategy</div>
+        <div class="sidebar__course-subtitle">GCP to AWS Platform Transition</div>
+      </div>
+
+      <!-- Module 1 -->
+      <div class="toc-module">
+        <div class="toc-module__title">
+          <span class="toc-module__icon">1</span>
+          Migration Assessment & Planning
+        </div>
+        <a class="toc-item toc-item--active" data-page="Module1/lesson1.html" onclick="navigateTo(this)">
+          <span class="toc-item__status">●</span>
+          Migration Drivers & Business Case
+        </a>
+        <a class="toc-item" data-page="Module1/lesson2.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Cloud Service Mapping: GCP vs AWS
+        </a>
+        <a class="toc-item" data-page="Module1/lesson3.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Assessment & Readiness Framework
+        </a>
+      </div>
+
+      <!-- Module 2 -->
+      <div class="toc-module">
+        <div class="toc-module__title">
+          <span class="toc-module__icon">2</span>
+          Technical Migration Execution
+        </div>
+        <a class="toc-item" data-page="Module2/lesson4.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Infrastructure Migration Patterns
+        </a>
+        <a class="toc-item" data-page="Module2/lesson5.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Data Migration & Storage Mapping
+        </a>
+        <a class="toc-item" data-page="Module2/lesson6.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Network & Security Configuration
+        </a>
+      </div>
+
+      <!-- Module 3 -->
+      <div class="toc-module">
+        <div class="toc-module__title">
+          <span class="toc-module__icon">3</span>
+          Optimization & Governance
+        </div>
+        <a class="toc-item" data-page="Module3/lesson7.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Cost Optimization & FinOps
+        </a>
+        <a class="toc-item" data-page="Module3/lesson8.html" onclick="navigateTo(this)">
+          <span class="toc-item__status"></span>
+          Governance, Compliance & Ops
+        </a>
+        <a class="toc-item toc-item--quiz" data-page="shared/assessmenttemplate.html" onclick="navigateTo(this)">
+          <span class="toc-item__status">✎</span>
+          Final Assessment
+        </a>
+      </div>
+    </aside>
+
+    <!-- Content Area -->
+    <main class="content-area">
+      <iframe class="content-frame" id="contentFrame" src="" name="contentFrame"></iframe>
+
+      <!-- Bottom Navigation -->
+      <div class="bottom-nav">
+        <div class="bottom-nav__info" id="lessonInfo">Lesson 1 of 8</div>
+        <div class="bottom-nav__buttons">
+          <button class="btn btn--secondary" id="btnPrev" onclick="prevPage()" disabled>← Previous</button>
+          <button class="btn btn--primary" id="btnNext" onclick="nextPage()">Next →</button>
+        </div>
+      </div>
+    </main>
+
+  </div>
+
+  <script>
+    // Course page order
+    var pages = [
+      "Module1/lesson1.html",
+      "Module1/lesson2.html",
+      "Module1/lesson3.html",
+      "Module2/lesson4.html",
+      "Module2/lesson5.html",
+      "Module2/lesson6.html",
+      "Module3/lesson7.html",
+      "Module3/lesson8.html",
+      "shared/assessmenttemplate.html"
+    ];
+
+    var currentPageIndex = 0;
+    var completedPages = {};
+
+    function init() {
+      // Try to restore bookmark from LMS
+      var bookmark = ScormGetValue("cmi.core.lesson_location");
+      if (bookmark && !isNaN(parseInt(bookmark))) {
+        currentPageIndex = parseInt(bookmark);
+      }
+      loadPage(currentPageIndex);
+    }
+
+    function loadPage(index) {
+      if (index < 0 || index >= pages.length) return;
+      currentPageIndex = index;
+
+      // Load content into iframe
+      var frame = document.getElementById("contentFrame");
+      frame.src = "../" + pages[index];
+
+      // Update sidebar active state
+      var items = document.querySelectorAll(".toc-item");
+      items.forEach(function(item, i) {
+        item.classList.remove("toc-item--active");
+        if (i === index) {
+          item.classList.add("toc-item--active");
+        }
+      });
+
+      // Mark previous pages as completed
+      for (var i = 0; i < index; i++) {
+        markCompleted(i);
+      }
+
+      // Update bottom nav
+      updateNav();
+
+      // Save bookmark to LMS
+      ScormSetValue("cmi.core.lesson_location", index.toString());
+
+      // Update progress
+      updateProgress();
+    }
+
+    function markCompleted(index) {
+      completedPages[index] = true;
+      var items = document.querySelectorAll(".toc-item");
+      if (items[index]) {
+        items[index].classList.add("toc-item--completed");
+        var status = items[index].querySelector(".toc-item__status");
+        if (status) status.innerHTML = "✓";
+      }
+    }
+
+    function navigateTo(el) {
+      var page = el.getAttribute("data-page");
+      var idx = pages.indexOf(page);
+      if (idx >= 0) {
+        // Mark current page as completed when navigating away
+        markCompleted(currentPageIndex);
+        loadPage(idx);
+      }
+    }
+
+    function prevPage() {
+      if (currentPageIndex > 0) {
+        markCompleted(currentPageIndex);
+        loadPage(currentPageIndex - 1);
+      }
+    }
+
+    function nextPage() {
+      if (currentPageIndex < pages.length - 1) {
+        markCompleted(currentPageIndex);
+        loadPage(currentPageIndex + 1);
+      }
+    }
+
+    function updateNav() {
+      var btnPrev = document.getElementById("btnPrev");
+      var btnNext = document.getElementById("btnNext");
+      var info = document.getElementById("lessonInfo");
+
+      btnPrev.disabled = (currentPageIndex === 0);
+
+      if (currentPageIndex === pages.length - 1) {
+        btnNext.textContent = "Finish ✓";
+        btnNext.onclick = function() { finishCourse(); };
+        info.textContent = "Final Assessment";
+      } else {
+        btnNext.textContent = "Next →";
+        btnNext.onclick = function() { nextPage(); };
+        info.textContent = "Lesson " + (currentPageIndex + 1) + " of " + (pages.length - 1);
+      }
+    }
+
+    function updateProgress() {
+      var completed = Object.keys(completedPages).length;
+      var total = pages.length;
+      var pct = Math.round((completed / total) * 100);
+      document.getElementById("progressFill").style.width = pct + "%";
+      document.getElementById("progressLabel").textContent = pct + "% Complete";
+    }
+
+    function exitCourse() {
+      ScormSetValue("cmi.core.lesson_status", "incomplete");
+      ScormCommit();
+      ScormDisconnect();
+      if (window.parent && window.parent !== window) {
+        window.parent.close();
+      } else {
+        window.close();
+      }
+    }
+
+    function finishCourse() {
+      markCompleted(currentPageIndex);
+      ScormSetValue("cmi.core.lesson_status", "completed");
+      ScormCommit();
+      updateProgress();
+    }
+
+    // Record quiz score (called by assessment page)
+    function RecordTest(score) {
+      ScormSetValue("cmi.core.score.raw", score.toString());
+      ScormSetValue("cmi.core.score.min", "0");
+      ScormSetValue("cmi.core.score.max", "100");
+      if (score >= 70) {
+        ScormSetValue("cmi.core.lesson_status", "passed");
+      } else {
+        ScormSetValue("cmi.core.lesson_status", "failed");
+      }
+      ScormCommit();
+      updateProgress();
+    }
+
+    function RecordQuestion(id, text, type, learnerResponse, correctAnswer, wasCorrect, objectiveId) {
+      // Optional: record individual interactions
+    }
+
+    // Initialize on load
+    window.onload = function() {
+      ScormConnect();
+      init();
+    };
+
+    window.onbeforeunload = function() {
+      ScormSetValue("cmi.core.exit", "suspend");
+      ScormCommit();
+      ScormDisconnect();
+    };
+  </script>
+
+</body>
+</html>
