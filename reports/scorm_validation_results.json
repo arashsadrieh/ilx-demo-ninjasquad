@@ -1,0 +1,111 @@
+{
+  "timestamp": "2026-04-02T08:37:18.454404",
+  "package_zip": "/workspace/ilx-demo-ninjasquad/scorm_package.zip",
+  "total": 17,
+  "passed": 7,
+  "failed": 10,
+  "results": [
+    {
+      "id": "M01",
+      "name": "Manifest file accessible",
+      "status": "FAIL",
+      "detail": "No ZIP or directory found"
+    },
+    {
+      "id": "F01",
+      "name": "Package accessible for file check",
+      "status": "PASS",
+      "detail": "Source: directory, 9 files"
+    },
+    {
+      "id": "F02",
+      "name": "Manifest readable for file check",
+      "status": "FAIL",
+      "detail": ""
+    },
+    {
+      "id": "C02-lesson1_1.html",
+      "name": "Lesson lesson1_1.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson1_2.html",
+      "name": "Lesson lesson1_2.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson1_3.html",
+      "name": "Lesson lesson1_3.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson2_1.html",
+      "name": "Lesson lesson2_1.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson2_2.html",
+      "name": "Lesson lesson2_2.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson2_3.html",
+      "name": "Lesson lesson2_3.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson3_1.html",
+      "name": "Lesson lesson3_1.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C02-lesson3_2.html",
+      "name": "Lesson lesson3_2.html has content",
+      "status": "FAIL",
+      "detail": "File not found"
+    },
+    {
+      "id": "C04",
+      "name": "Launch page exists and has content",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "C05",
+      "name": "SCORM functions include LMSInitialize",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "C06",
+      "name": "SCORM functions include LMSFinish",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "C07",
+      "name": "SCORM functions include LMSGetValue",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "C08",
+      "name": "SCORM functions include LMSSetValue",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "C09",
+      "name": "SCORM functions include API discovery",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

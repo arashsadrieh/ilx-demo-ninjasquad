@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lesson 1: Migration Drivers & Business Case</title>
+  <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+<div class="lesson">
+
+  <!-- Module banner image -->
+  <img src="../assets/images/module1_banner.png" alt="Migration Assessment & Planning" class="lesson__banner">
+
+  <!-- Breadcrumb -->
+  <div class="lesson__breadcrumb">
+    <a href="#">Course Home</a>
+    <span class="lesson__breadcrumb-sep">›</span>
+    <a href="#">Module 1</a>
+    <span class="lesson__breadcrumb-sep">›</span>
+    <span>Lesson 1</span>
+  </div>
+
+  <!-- Title -->
+  <h1>Migration Drivers & Business Case</h1>
+  <p class="lesson__subtitle">Understand why organizations migrate between cloud providers and how to build a compelling business case for a GCP-to-AWS platform transition.</p>
+
+  <!-- Section -->
+  <h2>Why Organizations Migrate Cloud Platforms</h2>
+  <p>Cloud platform migration — moving workloads from one cloud provider to another — has become increasingly common as organizations mature their cloud strategies. A GCP-to-AWS migration may be driven by several factors:</p>
+
+  <ul>
+    <li><strong>Strategic alignment</strong> — consolidating on a single cloud vendor used by the broader organization</li>
+    <li><strong>Service capabilities</strong> — leveraging AWS services not available on GCP (e.g., specialized AI/ML, IoT, or industry-specific solutions)</li>
+    <li><strong>Cost optimization</strong> — taking advantage of pricing models, reserved instances, or enterprise agreements</li>
+    <li><strong>Ecosystem & talent</strong> — accessing a larger pool of AWS-certified engineers and third-party integrations</li>
+    <li><strong>Regulatory requirements</strong> — meeting compliance mandates that favor specific data center locations or certifications</li>
+  </ul>
+
+  <!-- Callout: Key Fact -->
+  <div class="callout callout--info">
+    <span class="callout__icon">ℹ️</span>
+    <div class="callout__content">
+      <div class="callout__title">Industry Insight</div>
+      <div class="callout__text">According to Flexera's 2025 State of the Cloud Report, 89% of enterprises have a multi-cloud strategy, and 32% report cross-cloud migration as a top priority.</div>
+    </div>
+  </div>
+
+  <!-- Section with Table -->
+  <h2>GCP vs AWS: Service Category Overview</h2>
+  <p>Before building a migration business case, it's critical to understand how services map between the two platforms:</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th>GCP Service</th>
+        <th>AWS Equivalent</th>
+        <th>Migration Complexity</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Compute</td>
+        <td>Compute Engine</td>
+        <td>EC2</td>
+        <td>Low</td>
+      </tr>
+      <tr>
+        <td>Kubernetes</td>
+        <td>GKE</td>
+        <td>EKS</td>
+        <td>Medium</td>
+      </tr>
+      <tr>
+        <td>Serverless</td>
+        <td>Cloud Functions</td>
+        <td>Lambda</td>
+        <td>Medium</td>
+      </tr>
+      <tr>
+        <td>Object Storage</td>
+        <td>Cloud Storage</td>
+        <td>S3</td>
+        <td>Low</td>
+      </tr>
+      <tr>
+        <td>Database (SQL)</td>
+        <td>Cloud SQL</td>
+        <td>RDS</td>
+        <td>Medium</td>
+      </tr>
+      <tr>
+        <td>Data Warehouse</td>
+        <td>BigQuery</td>
+        <td>Redshift / Athena</td>
+        <td>High</td>
+      </tr>
+      <tr>
+        <td>IAM</td>
+        <td>Cloud IAM</td>
+        <td>IAM</td>
+        <td>High</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Section with Code Block -->
+  <h2>Building the Business Case</h2>
+  <p>A strong migration business case includes a Total Cost of Ownership (TCO) analysis. Here's a simplified cost model comparison using Terraform:</p>
+
+  <pre data-lang="terraform"><code># GCP Compute Engine instance
+resource "google_compute_instance" "web_server" {
+  name         = "web-server"
+  machine_type = "e2-standard-4"   # 4 vCPU, 16 GB RAM
+  zone         = "us-central1-a"
+  # Estimated: ~$97/month on-demand
+}
+
+# AWS EC2 equivalent
+resource "aws_instance" "web_server" {
+  ami           = "ami-0c55b159cbfafe1f0"
+  instance_type = "m5.xlarge"       # 4 vCPU, 16 GB RAM
+  # Estimated: ~$140/month on-demand
+  # With 1-yr RI: ~$89/month (36% savings)
+}</code></pre>
+
+  <!-- Warning callout -->
+  <div class="callout callout--warning">
+    <span class="callout__icon">⚠️</span>
+    <div class="callout__content">
+      <div class="callout__title">Important Consideration</div>
+      <div class="callout__text">Don't compare list prices alone. Factor in committed-use discounts (GCP CUDs vs AWS Reserved Instances), data transfer costs, and support tiers. A 3-year commitment on AWS can reduce costs by up to 60%.</div>
+    </div>
+  </div>
+
+  <h3>TCO Components to Evaluate</h3>
+  <ol>
+    <li><strong>Compute costs</strong> — compare instance types, auto-scaling policies, and committed-use pricing</li>
+    <li><strong>Storage costs</strong> — compare tiered storage pricing and data retrieval fees</li>
+    <li><strong>Network egress</strong> — AWS and GCP have different egress pricing models</li>
+    <li><strong>Migration costs</strong> — tooling, re-architecture effort, team training, and dual-running period</li>
+    <li><strong>Operational costs</strong> — monitoring, support contracts, and staff retraining</li>
+  </ol>
+
+  <!-- Key Takeaways -->
+  <div class="takeaways">
+    <div class="takeaways__title">📋 Key Takeaways</div>
+    <ul>
+      <li>Cloud migration is driven by strategic, technical, cost, and regulatory factors</li>
+      <li>GCP and AWS have equivalent services for most categories, but migration complexity varies</li>
+      <li>A robust TCO analysis must include migration costs, not just running costs</li>
+      <li>Committed-use pricing (CUDs/RIs) can significantly change the cost equation</li>
+      <li>Consider the dual-running period where both clouds operate simultaneously</li>
+    </ul>
+  </div>
+
+</div>
+
+</body>
+</html>
