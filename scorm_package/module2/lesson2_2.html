@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Migration Strategies and Transfer Optimization</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+<span class="module-badge">Module 2 &mdash; Lesson 2</span>
+<h1>Data Migration Strategies and Transfer Optimization</h1>
+<p class="reading-time">8 min read</p>
+
+<p>
+    Data migration is consistently ranked as the <strong>highest-risk component</strong> of any cloud-to-cloud transition.
+    Unlike infrastructure, which can be reproduced from code, data is unique, irreplaceable, and often subject to
+    regulatory constraints around residency and encryption in transit. A failed data migration can result in data loss,
+    extended downtime, compliance violations, and eroded stakeholder confidence. This lesson provides a comprehensive,
+    strategy-by-strategy breakdown of how to move data from GCP storage and analytics services to their AWS equivalents
+    with maximum throughput, minimum risk, and validated integrity.
+</p>
+
+<h2>1. Object Storage Migration: GCS to Amazon S3</h2>
+
+<p>
+    Google Cloud Storage (GCS) and Amazon S3 share a nearly identical object storage paradigm&mdash;flat namespace,
+    bucket-level policies, object versioning, and lifecycle rules. This similarity makes object storage one of the more
+    straightforward migration targets, but the sheer volume of data in production environments demands purpose-built
+    tooling rather than manual copy operations.
+</p>
+
+<p>
+    <strong>AWS DataSync</strong> is the recommended service for GCS-to-S3 transfers. DataSync is a fully managed data
+    transfer service that automates moving data between on-premises storage, other clouds, and AWS services. For
+    cross-cloud object storage migration, DataSync is up to <strong>10x faster than open-source tools</strong> such as
+    <code>rclone</code> or <code>gsutil rsync</code>, thanks to its purpose-built network protocol, automatic parallel
+    transfers, and built-in data integrity verification.
+</p>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-value">10x</div>
+        <div class="stat-label">Faster than open-source transfer tools</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">250 TB</div>
+        <div class="stat-label">Thomson Reuters case study transfer</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">72 hrs</div>
+        <div class="stat-label">Transfer completion time</div>
+    </div>
+</div>
+
+<p>
+    A notable reference case is <strong>Thomson Reuters</strong>, which migrated approximately <strong>250 TB of data in
+    72 hours</strong> using AWS DataSync. The key enablers for this performance were:
+</p>
+
+<ul>
+    <li>Deploying multiple DataSync agents in parallel to saturate available bandwidth</li>
+    <li>Configuring task-level bandwidth throttling to avoid saturating production network links</li>
+    <li>Using DataSync's built-in verification (checksum comparison after transfer) rather than post-hoc validation scripts</li>
+    <li>Scheduling transfers during off-peak hours to minimize impact on production GCS read performance</li>
+</ul>
+
+<h3>DataSync Configuration Essentials</h3>
+<pre><code># AWS CLI: Create a DataSync task for GCS-to-S3 migration
+# Step 1 - Create source location (GCS via S3-compatible API)
+aws datasync create-location-object-storage \
+  --server-hostname storage.googleapis.com \
+  --bucket-name my-gcs-source-bucket \
+  --access-key GOOG1EXXXXXXXXXXXXX \
+  --secret-key xXxXxXxXxXxXxXxXxXxX \
+  --server-protocol HTTPS \
+  --server-port 443
+
+# Step 2 - Create destination location (S3)
+aws datasync create-location-s3 \
+  --s3-bucket-arn arn:aws:s3:::my-aws-target-bucket \
+  --s3-config BucketAccessRoleArn=arn:aws:iam::123456789012:role/DataSyncS3Role
+
+# Step 3 - Create and start the task
+aws datasync create-task \
+  --source-location-arn arn:aws:datasync:us-east-1:123456789012:location/loc-src \
+  --destination-location-arn arn:aws:datasync:us-east-1:123456789012:location/loc-dst \
+  --options VerifyMode=POINT_IN_TIME_CONSISTENT,OverwriteMode=ALWAYS</code></pre>
+
+<h2>2. Database Migration with AWS DMS</h2>
+
+<p>
+    For relational databases (Cloud SQL for PostgreSQL/MySQL migrating to Amazon RDS or Aurora), <strong>AWS Database
+    Migration Service (DMS)</strong> provides continuous replication with <strong>Change Data Capture (CDC)</strong>. CDC
+    enables near-zero-downtime migration by replicating ongoing changes from the source database to the target while
+    the initial full load is in progress and thereafter.
+</p>
+
+<h3>DMS Sizing and Performance Guidelines</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>Parameter</th>
+            <th>Development / Test</th>
+            <th>Production</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Instance class</strong></td>
+            <td><code>dms.c5.large</code></td>
+            <td><code>dms.c5.2xlarge</code> or larger</td>
+        </tr>
+        <tr>
+            <td><strong>Storage</strong></td>
+            <td>50 GB SSD</td>
+            <td>200&ndash;500 GB SSD</td>
+        </tr>
+        <tr>
+            <td><strong>Target replication lag</strong></td>
+            <td>&lt; 30 seconds</td>
+            <td><strong>&lt; 5 seconds</strong></td>
+        </tr>
+        <tr>
+            <td><strong>Max tables per task</strong></td>
+            <td>Unlimited</td>
+            <td>8&ndash;10 (split large schemas into parallel tasks)</td>
+        </tr>
+        <tr>
+            <td><strong>LOB mode</strong></td>
+            <td>Full LOB</td>
+            <td>Limited LOB (set max size to reduce overhead)</td>
+        </tr>
+        <tr>
+            <td><strong>Multi-AZ</strong></td>
+            <td>Disabled</td>
+            <td>Enabled (automatic failover)</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    For production workloads, always use <strong><code>c5.2xlarge</code> or larger</strong> replication instances. Smaller
+    instances may appear to work during initial testing but will fall behind under CDC load when the source database is
+    under heavy write pressure. The target replication lag for production cutover readiness is <strong>less than 5
+    seconds</strong>&mdash;this ensures the cutover window (stop writes, let DMS catch up, switch connection strings)
+    can be completed within minutes rather than hours.
+</p>
+
+<h2>3. Analytics Migration: BigQuery to Amazon Redshift</h2>
+
+<div class="callout callout-important">
+    <div class="callout-title">Important: Heterogeneous Migration Complexity</div>
+    <p>
+        BigQuery-to-Redshift migration is classified as a <strong>heterogeneous migration</strong>&mdash;the most complex
+        category. These platforms differ not only in SQL dialect and data types but also in their fundamental architecture.
+        BigQuery is serverless with columnar storage and automatic scaling; Redshift is a provisioned cluster with
+        distribution keys and sort keys that must be explicitly designed. There is no one-click migration path. Plan for
+        4&ndash;8 weeks of dedicated effort for enterprise-scale data warehouses.
+    </p>
+</div>
+
+<p>
+    The <strong>AWS Schema Conversion Tool (SCT)</strong> partially automates the schema translation from BigQuery to
+    Redshift, but significant manual intervention is required for:
+</p>
+
+<ul>
+    <li><strong>SQL dialect differences:</strong> BigQuery's Standard SQL supports <code>STRUCT</code>, <code>ARRAY</code>,
+        and nested/repeated fields natively. Redshift has no equivalent&mdash;these must be flattened into separate tables
+        or serialized as JSON <code>VARCHAR</code> columns.</li>
+    <li><strong>User-Defined Functions (UDFs):</strong> BigQuery JavaScript UDFs must be rewritten as Redshift
+        Python or SQL UDFs.</li>
+    <li><strong>Partitioning:</strong> BigQuery's ingestion-time and column-based partitioning translates to
+        Redshift's <code>DISTKEY</code> and <code>SORTKEY</code> design, which requires query pattern analysis.</li>
+    <li><strong>Materialized views:</strong> Logic must be validated and rewritten to account for Redshift's
+        different refresh semantics.</li>
+</ul>
+
+<h3>Staged Migration Approach</h3>
+
+<p>
+    The recommended approach for large-scale BigQuery-to-Redshift migration uses a staged pipeline that avoids direct
+    service-to-service transfer (which is not natively supported):
+</p>
+
+<ol>
+    <li><strong>Export from BigQuery to GCS:</strong> Use <code>bq extract</code> to export tables in
+        <strong>Apache Parquet</strong> format. Parquet preserves column types, supports compression, and is
+        splittable for parallel processing.</li>
+    <li><strong>Transfer GCS to S3 via DataSync:</strong> Use the same DataSync pipeline established for object
+        storage migration. Parquet files transfer efficiently due to columnar compression.</li>
+    <li><strong>Load from S3 into Redshift:</strong> Use the Redshift <code>COPY</code> command to bulk-load
+        Parquet files directly from S3.</li>
+</ol>
+
+<h3>Redshift COPY Performance: Format Comparison</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>File Format</th>
+            <th>Load Speed</th>
+            <th>Compression</th>
+            <th>Schema Preservation</th>
+            <th>Recommendation</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Apache Parquet</strong></td>
+            <td><strong>~100 MB/s per node</strong></td>
+            <td>Excellent (Snappy/ZSTD)</td>
+            <td>Full type fidelity</td>
+            <td><strong>Preferred</strong></td>
+        </tr>
+        <tr>
+            <td>CSV (gzip)</td>
+            <td>~25 MB/s per node</td>
+            <td>Good (gzip)</td>
+            <td>Requires manifest</td>
+            <td>Legacy fallback</td>
+        </tr>
+        <tr>
+            <td>JSON</td>
+            <td>~15 MB/s per node</td>
+            <td>Moderate</td>
+            <td>Flexible but lossy</td>
+            <td>Semi-structured only</td>
+        </tr>
+        <tr>
+            <td>Avro</td>
+            <td>~80 MB/s per node</td>
+            <td>Good (Deflate)</td>
+            <td>Good type support</td>
+            <td>Alternative to Parquet</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    Parquet loading achieves approximately <strong>100 MB/s per Redshift node</strong>, compared to only <strong>25 MB/s
+    for CSV</strong>&mdash;a 4x performance advantage. For a 10 TB data warehouse on an 8-node <code>ra3.xlplus</code>
+    cluster, this translates to roughly 13 minutes for Parquet versus nearly an hour for CSV.
+</p>
+
+<pre><code>-- Redshift COPY command for Parquet loading from S3
+COPY analytics.fact_transactions
+FROM 's3://migration-staging-bucket/bigquery-export/fact_transactions/'
+IAM_ROLE 'arn:aws:iam::123456789012:role/RedshiftS3ReadRole'
+FORMAT AS PARQUET
+COMPUPDATE ON
+STATUPDATE ON;</code></pre>
+
+<h2>4. Migration Strategy Comparison by Data Type</h2>
+
+<p>
+    The following table summarizes the recommended migration strategy for each major data category, along with expected
+    complexity and tooling:
+</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Data Type</th>
+            <th>GCP Source</th>
+            <th>AWS Target</th>
+            <th>Migration Tool</th>
+            <th>Complexity</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Object / Blob storage</td>
+            <td>Cloud Storage (GCS)</td>
+            <td>Amazon S3</td>
+            <td>AWS DataSync</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>Relational (PostgreSQL)</td>
+            <td>Cloud SQL</td>
+            <td>Amazon RDS / Aurora</td>
+            <td>AWS DMS with CDC</td>
+            <td>Medium</td>
+        </tr>
+        <tr>
+            <td>Relational (MySQL)</td>
+            <td>Cloud SQL</td>
+            <td>Amazon RDS / Aurora</td>
+            <td>AWS DMS with CDC</td>
+            <td>Medium</td>
+        </tr>
+        <tr>
+            <td>NoSQL (Document)</td>
+            <td>Firestore</td>
+            <td>Amazon DynamoDB</td>
+            <td>Custom ETL (Dataflow + Kinesis)</td>
+            <td>High</td>
+        </tr>
+        <tr>
+            <td>Data Warehouse</td>
+            <td>BigQuery</td>
+            <td>Amazon Redshift</td>
+            <td>SCT + Staged Pipeline</td>
+            <td><strong>Very High</strong></td>
+        </tr>
+        <tr>
+            <td>Cache / In-Memory</td>
+            <td>Memorystore (Redis)</td>
+            <td>Amazon ElastiCache</td>
+            <td>RDB snapshot export/import</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>File / NFS</td>
+            <td>Filestore</td>
+            <td>Amazon EFS</td>
+            <td>AWS DataSync (NFS agent)</td>
+            <td>Low&ndash;Medium</td>
+        </tr>
+    </tbody>
+</table>
+
+<h2>5. Data Validation and Integrity Checks</h2>
+
+<p>
+    No data migration is complete without comprehensive validation. Every transfer must be verified at multiple levels:
+</p>
+
+<ul>
+    <li><strong>Object count validation:</strong> Compare the number of objects in GCS buckets against S3 buckets post-transfer</li>
+    <li><strong>Byte-level checksums:</strong> DataSync performs automatic MD5/SHA-256 verification; for DMS, run
+        row-count and checksum queries on source and target databases</li>
+    <li><strong>Schema validation:</strong> Confirm that all tables, columns, indexes, and constraints exist in the target with correct data types</li>
+    <li><strong>Sampling validation:</strong> Run spot-check queries on 1&ndash;5% of records to verify data content accuracy</li>
+    <li><strong>Referential integrity:</strong> Validate foreign key relationships in the target database match the source</li>
+</ul>
+
+<hr>
+
+<div class="key-takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+        <li>Data migration is the highest-risk component of cloud migration. Use purpose-built tools (DataSync, DMS, SCT) rather than manual scripts to ensure reliability and performance.</li>
+        <li>AWS DataSync achieves up to 10x faster GCS-to-S3 transfers than open-source alternatives, with built-in integrity verification. The Thomson Reuters case study demonstrates 250 TB transferred in 72 hours.</li>
+        <li>For relational database migration, size DMS replication instances at <code>c5.2xlarge</code> or larger for production workloads, targeting less than 5 seconds of replication lag for cutover readiness.</li>
+        <li>BigQuery-to-Redshift is the most complex migration path. Use a staged approach: BigQuery export to Parquet on GCS, DataSync to S3, then Redshift COPY. Parquet loads at 100 MB/s per node versus 25 MB/s for CSV.</li>
+        <li>Always validate data integrity at multiple levels&mdash;object counts, checksums, schema verification, sampling, and referential integrity&mdash;before proceeding to application cutover.</li>
+    </ul>
+</div>
+
+</body>
+</html>

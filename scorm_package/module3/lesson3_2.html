@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Tuning and Architectural Optimization</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+<span class="module-badge">Module 3 &mdash; Lesson 2</span>
+<h1>Performance Tuning and Architectural Optimization</h1>
+<p class="reading-time">8 min read</p>
+
+<p>
+    A successful migration from GCP to AWS is not complete until workloads are optimized for the target platform's unique performance characteristics. Simply lifting and shifting workloads preserves functional parity but leaves significant performance gains on the table. This lesson applies the <strong>AWS Well-Architected Framework's Performance Efficiency pillar</strong> to systematically tune networking, database, and caching layers, transforming a migrated environment into a truly cloud-native architecture.
+</p>
+
+<p>
+    The Performance Efficiency pillar is built on four key areas: selection of the right resource types, monitoring to ensure sustained performance, understanding of trade-offs, and the ability to adopt new services as they become available. Post-migration optimization should address each of these areas across every tier of the application stack.
+</p>
+
+<h2>1. Network Performance Optimization</h2>
+
+<h3>Enhanced Networking (ENA)</h3>
+
+<p>
+    AWS Enhanced Networking uses single root I/O virtualization (SR-IOV) to provide high-performance networking capabilities on supported instance types. Enabling the <strong>Elastic Network Adapter (ENA)</strong> delivers bandwidth of <strong>up to 100 Gbps</strong> on current-generation instance families including M5, C5, R5, and newer (M6i, C6i, R6i). This represents a substantial improvement over the standard Xen-based virtual networking stack and is essential for data-intensive workloads migrated from GCP, where similar capabilities were provided via gVNIC.
+</p>
+
+<p>
+    Verify ENA support and enablement on all migrated instances:
+</p>
+
+<pre><code># Verify ENA support on an instance
+aws ec2 describe-instances --instance-ids i-0abcd1234efgh5678 \
+    --query 'Reservations[*].Instances[*].EnaSupport'
+
+# Verify ENA driver version inside the instance
+modinfo ena | grep version</code></pre>
+
+<h3>VPC Endpoints for AWS Services</h3>
+
+<p>
+    Traffic between your VPC and AWS services like S3 and DynamoDB typically traverses the public internet via a NAT Gateway, introducing latency and data transfer costs. <strong>VPC Gateway Endpoints</strong> (for S3 and DynamoDB) and <strong>VPC Interface Endpoints</strong> (for other services) route traffic over the AWS private backbone, achieving a <strong>30-50% reduction in latency</strong> while eliminating NAT Gateway processing charges.
+</p>
+
+<pre><code># Create a VPC Gateway Endpoint for S3
+aws ec2 create-vpc-endpoint \
+    --vpc-id vpc-0abc123def456 \
+    --service-name com.amazonaws.us-east-1.s3 \
+    --route-table-ids rtb-0abc123def456
+
+# Create an Interface Endpoint for DynamoDB
+aws ec2 create-vpc-endpoint \
+    --vpc-id vpc-0abc123def456 \
+    --vpc-endpoint-type Interface \
+    --service-name com.amazonaws.us-east-1.dynamodb \
+    --subnet-ids subnet-aaa111 subnet-bbb222</code></pre>
+
+<h3>Multi-AZ Deployment with Application Load Balancer</h3>
+
+<p>
+    Distribute workloads across multiple Availability Zones using an <strong>Application Load Balancer (ALB)</strong> with <strong>cross-zone load balancing</strong> enabled. This configuration ensures traffic is evenly distributed across targets in all registered AZs, preventing hotspots that degrade performance when one zone has fewer healthy instances. Cross-zone load balancing also improves fault tolerance by transparently routing around unhealthy targets regardless of their zone.
+</p>
+
+<ul>
+    <li>Deploy targets in a minimum of three Availability Zones for production workloads</li>
+    <li>Enable cross-zone load balancing on the ALB target group to equalize request distribution</li>
+    <li>Use connection draining (deregistration delay) of 30-60 seconds to allow in-flight requests to complete during scaling events</li>
+    <li>Configure health check intervals of 10-15 seconds with a threshold of 2 consecutive failures for rapid unhealthy target removal</li>
+</ul>
+
+<h2>2. Database Performance Tuning</h2>
+
+<h3>RDS Performance Insights</h3>
+
+<p>
+    Amazon RDS Performance Insights provides a dashboard for monitoring database load and identifying performance bottlenecks. It visualizes active sessions sliced by wait events, SQL statements, hosts, and users, making it straightforward to pinpoint whether performance issues stem from lock contention, inefficient queries, or resource saturation. Enable Performance Insights on all RDS instances migrated from Cloud SQL to gain immediate visibility into database behavior under production load.
+</p>
+
+<h3>Read Replicas for Read-Heavy Workloads</h3>
+
+<p>
+    Applications migrated from Cloud SQL often have read-heavy access patterns that overload a single primary instance. Deploy <strong>RDS Read Replicas</strong> to offload <strong>40-60% of read traffic</strong> from the primary database. Read replicas use asynchronous replication and can be placed in different Availability Zones or even different regions for disaster recovery. Route read queries using application-level logic, a database proxy, or connection string configuration.
+</p>
+
+<h3>RDS Proxy for Connection Management</h3>
+
+<p>
+    Serverless and containerized architectures frequently overwhelm relational databases with excessive connection overhead. <strong>Amazon RDS Proxy</strong> pools and shares database connections, reducing connection overhead by <strong>up to 80%</strong> and enabling <strong>10x connection scaling</strong> compared to direct connections. RDS Proxy also improves failover times by automatically routing connections to a standby instance without dropping the application's connection pool.
+</p>
+
+<pre><code># Create an RDS Proxy for a PostgreSQL database
+aws rds create-db-proxy \
+    --db-proxy-name migration-app-proxy \
+    --engine-family POSTGRESQL \
+    --auth '{
+        "AuthScheme": "SECRETS",
+        "SecretArn": "arn:aws:secretsmanager:us-east-1:123456789:secret:db-creds",
+        "IAMAuth": "REQUIRED"
+    }' \
+    --role-arn arn:aws:iam::123456789:role/rds-proxy-role \
+    --vpc-subnet-ids subnet-aaa111 subnet-bbb222 subnet-ccc333</code></pre>
+
+<h3>Aurora PostgreSQL: The Cloud SQL Migration Target</h3>
+
+<p>
+    For workloads migrating from Google Cloud SQL for PostgreSQL, <strong>Amazon Aurora PostgreSQL</strong> is the recommended target database engine. Aurora's distributed, log-structured storage architecture delivers <strong>3x the throughput</strong> of standard PostgreSQL while maintaining full wire-protocol compatibility. Aurora supports <strong>up to 15 auto-scaled read replicas</strong> with sub-10ms replica lag, compared to Cloud SQL's maximum of 10 read replicas with higher replication latency.
+</p>
+
+<div class="callout callout-info">
+    <div class="callout-title">Aurora's Distributed Architecture Advantage</div>
+    <p>
+        Aurora's storage layer automatically replicates data <strong>six ways across three Availability Zones</strong>, with continuous backup to Amazon S3. This architecture eliminates the need for manual multi-AZ replication configuration that Cloud SQL requires. Aurora can sustain the loss of an entire Availability Zone with zero data loss and automatically heals storage faults in the background. The distributed storage also enables <strong>instant crash recovery</strong> &mdash; Aurora replays redo logs in parallel on demand rather than requiring sequential log replay, reducing restart times from minutes to seconds.
+    </p>
+</div>
+
+<h2>3. Caching Layer Optimization</h2>
+
+<h3>Amazon ElastiCache</h3>
+
+<p>
+    Introducing an in-memory caching layer between your application and database tiers can dramatically reduce latency and database load. <strong>Amazon ElastiCache</strong> supports both <strong>Redis</strong> and <strong>Memcached</strong> engines, delivering <strong>microsecond read latency</strong> and reducing direct database queries by <strong>70-90%</strong> for cached data paths.
+</p>
+
+<ul>
+    <li><strong>ElastiCache for Redis:</strong> Choose Redis for advanced data structures, persistence, pub/sub messaging, Lua scripting, and cluster mode with automatic sharding. Ideal for session stores, leaderboards, real-time analytics, and rate limiting.</li>
+    <li><strong>ElastiCache for Memcached:</strong> Choose Memcached for simple key-value caching with multi-threaded performance. Best for database query result caching and HTML fragment caching where persistence is not required.</li>
+</ul>
+
+<p>
+    Implement a cache-aside (lazy loading) pattern for most use cases: the application checks the cache first, retrieves from the database on a cache miss, and writes the result to the cache with a TTL. This pattern balances data freshness with performance.
+</p>
+
+<pre><code># Cache-aside pattern (Python pseudocode)
+import redis
+
+cache = redis.Redis(host='migration-cache.abc123.ng.0001.use1.cache.amazonaws.com')
+
+def get_product(product_id):
+    cache_key = f"product:{product_id}"
+
+    # Check cache first
+    cached = cache.get(cache_key)
+    if cached:
+        return json.loads(cached)
+
+    # Cache miss — query database
+    product = db.query("SELECT * FROM products WHERE id = %s", product_id)
+
+    # Populate cache with 5-minute TTL
+    cache.setex(cache_key, 300, json.dumps(product))
+    return product</code></pre>
+
+<h3>Amazon CloudFront CDN</h3>
+
+<p>
+    Amazon CloudFront is a global content delivery network with <strong>over 410 edge locations</strong> across 90+ cities worldwide. Placing CloudFront in front of your application tier delivers a <strong>50-80% reduction in end-user latency</strong> and offloads <strong>60-70% of requests from origin servers</strong>. CloudFront supports dynamic content acceleration (using persistent connections and TCP optimizations to the origin), static asset caching, WebSocket connections, and Lambda@Edge for edge-side compute.
+</p>
+
+<h3>API Gateway Caching</h3>
+
+<p>
+    For RESTful APIs migrated from GCP's API Gateway or Cloud Endpoints, enable <strong>Amazon API Gateway caching</strong> to store endpoint responses in an in-memory cache. This delivers a <strong>10-100x performance improvement</strong> for repeated requests by eliminating backend invocations entirely. Configure cache TTLs per-method and use cache key parameters to ensure correct cache segmentation. API Gateway caching is available in cache sizes from 0.5 GB to 237 GB.
+</p>
+
+<h2>4. Performance Optimization Reference</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Optimization Strategy</th>
+            <th>Target Layer</th>
+            <th>Performance Impact</th>
+            <th>Migration Relevance</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Enhanced Networking (ENA)</td>
+            <td>Network</td>
+            <td>Up to 100 Gbps bandwidth</td>
+            <td>Replace gVNIC capabilities from GCP</td>
+        </tr>
+        <tr>
+            <td>VPC Endpoints</td>
+            <td>Network</td>
+            <td>30-50% latency reduction</td>
+            <td>Replace Private Google Access patterns</td>
+        </tr>
+        <tr>
+            <td>Multi-AZ ALB + Cross-Zone LB</td>
+            <td>Network</td>
+            <td>Even traffic distribution, HA</td>
+            <td>Replace GCP HTTP(S) Load Balancer</td>
+        </tr>
+        <tr>
+            <td>RDS Read Replicas</td>
+            <td>Database</td>
+            <td>40-60% read offload</td>
+            <td>Expand on Cloud SQL read replica patterns</td>
+        </tr>
+        <tr>
+            <td>RDS Proxy</td>
+            <td>Database</td>
+            <td>80% connection overhead reduction</td>
+            <td>Solve serverless connection scaling</td>
+        </tr>
+        <tr>
+            <td>Aurora PostgreSQL</td>
+            <td>Database</td>
+            <td>3x throughput, 15 read replicas</td>
+            <td>Primary Cloud SQL migration target</td>
+        </tr>
+        <tr>
+            <td>ElastiCache (Redis/Memcached)</td>
+            <td>Caching</td>
+            <td>Microsecond latency, 70-90% query reduction</td>
+            <td>Replace Memorystore for Redis</td>
+        </tr>
+        <tr>
+            <td>CloudFront CDN</td>
+            <td>Content Delivery</td>
+            <td>50-80% latency reduction, 60-70% origin offload</td>
+            <td>Replace Cloud CDN</td>
+        </tr>
+        <tr>
+            <td>API Gateway Caching</td>
+            <td>API Layer</td>
+            <td>10-100x performance improvement</td>
+            <td>Replace Cloud Endpoints / Apigee caching</td>
+        </tr>
+    </tbody>
+</table>
+
+<hr>
+
+<div class="key-takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+        <li>Apply the AWS Well-Architected Performance Efficiency pillar systematically across networking, database, and caching layers after migration.</li>
+        <li>Enable Enhanced Networking (ENA) on all production instances for up to 100 Gbps bandwidth, and deploy VPC endpoints to reduce service-to-service latency by 30-50%.</li>
+        <li>Use RDS Proxy to reduce connection overhead by 80% and enable 10x connection scaling for serverless and containerized workloads.</li>
+        <li>Migrate Cloud SQL workloads to Aurora PostgreSQL for 3x throughput and up to 15 auto-scaled read replicas with sub-10ms lag.</li>
+        <li>Deploy ElastiCache for microsecond-latency caching that reduces database queries by 70-90%, and use CloudFront's 410+ edge locations to cut end-user latency by 50-80%.</li>
+        <li>Enable API Gateway caching for 10-100x improvement on frequently requested API endpoints, eliminating redundant backend invocations.</li>
+    </ul>
+</div>
+
+</body>
+</html>

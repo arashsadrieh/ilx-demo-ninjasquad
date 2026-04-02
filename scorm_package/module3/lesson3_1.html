@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost Optimization and Financial Operations</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+<span class="module-badge">Module 3 &mdash; Lesson 1</span>
+<h1>Cost Optimization and Financial Operations</h1>
+<p class="reading-time">8 min read</p>
+
+<p>
+    Migrating from GCP to AWS presents a strategic inflection point for rethinking cloud financial management. Without deliberate cost governance, organizations routinely overspend by 30% or more after migration due to unfamiliar pricing models, over-provisioned resources, and missed discount opportunities. This lesson establishes a comprehensive Financial Operations (FinOps) framework that aligns engineering decisions with business outcomes, ensuring your AWS environment delivers maximum value from day one.
+</p>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-value">20-40%</div>
+        <div class="stat-label">FinOps Savings Within 90 Days</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">72%</div>
+        <div class="stat-label">Max Reserved Instance Discount</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">90%</div>
+        <div class="stat-label">Max Spot Instance Savings</div>
+    </div>
+</div>
+
+<h2>1. Establishing a FinOps Practice</h2>
+
+<p>
+    Financial Operations (FinOps) is the cultural practice of bringing financial accountability to cloud spending. Organizations that implement FinOps practices typically achieve <strong>20-40% cost savings within the first 90 days</strong> of adoption. The FinOps lifecycle consists of three iterative phases: Inform (visibility and allocation), Optimize (rates and usage), and Operate (continuous governance).
+</p>
+
+<p>
+    A successful FinOps practice requires cross-functional collaboration between engineering, finance, and procurement teams. Start by establishing a Cloud Cost Center of Excellence (CCoE) that owns tagging standards, budget thresholds, and anomaly detection rules. Use AWS Cost Explorer, AWS Budgets, and Cost Anomaly Detection to create a single pane of glass for financial visibility across your entire AWS footprint.
+</p>
+
+<ul>
+    <li><strong>Inform phase:</strong> Implement a comprehensive tagging strategy with mandatory tags for <code>Environment</code>, <code>Team</code>, <code>Project</code>, and <code>CostCenter</code>. Enforce via AWS Organizations Service Control Policies (SCPs).</li>
+    <li><strong>Optimize phase:</strong> Systematically right-size resources, purchase commitment-based discounts, and eliminate waste.</li>
+    <li><strong>Operate phase:</strong> Automate governance with AWS Budgets alerts, Lambda-based remediation, and monthly FinOps review cadences.</li>
+</ul>
+
+<h2>2. Right-Sizing Compute Resources</h2>
+
+<p>
+    Compute costs typically represent <strong>60-70% of total cloud spend</strong>, making right-sizing the single most impactful optimization lever. After migration from GCP, workloads are frequently over-provisioned because teams map GCP machine types to the nearest AWS equivalent without performance benchmarking.
+</p>
+
+<h3>AWS Compute Optimizer</h3>
+
+<p>
+    AWS Compute Optimizer uses machine learning to analyze 14 days of historical CloudWatch metrics and deliver instance-level recommendations. Organizations that act on Compute Optimizer findings achieve an <strong>average cost reduction of 25%</strong> on their EC2 spend. The service evaluates CPU utilization, memory pressure, network I/O, and disk throughput to recommend optimal instance families and sizes.
+</p>
+
+<p>
+    Establish a recurring review cadence using the following utilization thresholds:
+</p>
+
+<ul>
+    <li><strong>&lt;40% average CPU utilization</strong> &rarr; Downsize to the next smaller instance type</li>
+    <li><strong>40-80% average CPU utilization</strong> &rarr; Current sizing is appropriate; continue monitoring</li>
+    <li><strong>&gt;80% average CPU utilization</strong> &rarr; Upsize or implement horizontal auto-scaling</li>
+</ul>
+
+<pre><code># Example: Query Compute Optimizer for EC2 recommendations
+aws compute-optimizer get-ec2-instance-recommendations \
+    --filters "name=Finding,values=OVER_PROVISIONED" \
+    --output table \
+    --query 'instanceRecommendations[*].{
+        InstanceId: instanceArn,
+        Current: currentInstanceType,
+        Recommended: recommendationOptions[0].instanceType,
+        Savings: recommendationOptions[0].estimatedMonthlySavings.value
+    }'</code></pre>
+
+<h2>3. Commitment-Based Discounts</h2>
+
+<p>
+    AWS offers two primary commitment vehicles: <strong>Savings Plans</strong> and <strong>Reserved Instances (RIs)</strong>. Both deliver discounts of <strong>up to 72%</strong> compared to On-Demand pricing in exchange for a one- or three-year usage commitment.
+</p>
+
+<h3>Savings Plans vs. Reserved Instances</h3>
+
+<p>
+    <strong>Compute Savings Plans</strong> offer the greatest flexibility, automatically applying discounts across instance families, sizes, operating systems, tenancies, and AWS regions. Unlike Reserved Instances, which are locked to a specific instance type in a specific Availability Zone, Compute Savings Plans adapt as your architecture evolves. This flexibility makes them the recommended starting point for most organizations, especially those still stabilizing their AWS footprint post-migration.
+</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Feature</th>
+            <th>Compute Savings Plans</th>
+            <th>EC2 Instance Savings Plans</th>
+            <th>Reserved Instances (Standard)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Max Discount</td>
+            <td>Up to 66%</td>
+            <td>Up to 72%</td>
+            <td>Up to 72%</td>
+        </tr>
+        <tr>
+            <td>Instance Family Flexibility</td>
+            <td>Yes</td>
+            <td>No</td>
+            <td>No</td>
+        </tr>
+        <tr>
+            <td>Region Flexibility</td>
+            <td>Yes</td>
+            <td>No</td>
+            <td>Zonal or Regional</td>
+        </tr>
+        <tr>
+            <td>Size Flexibility</td>
+            <td>Yes</td>
+            <td>Yes</td>
+            <td>Regional only</td>
+        </tr>
+        <tr>
+            <td>OS / Tenancy Flexibility</td>
+            <td>Yes</td>
+            <td>No</td>
+            <td>Limited</td>
+        </tr>
+        <tr>
+            <td>Best For</td>
+            <td>Dynamic, multi-family workloads</td>
+            <td>Stable single-family workloads</td>
+            <td>Predictable, static deployments</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>Optimal Coverage Strategy</h3>
+
+<p>
+    The recommended coverage ratio balances savings with operational agility:
+</p>
+
+<ul>
+    <li><strong>70-80% baseline coverage with Savings Plans:</strong> Cover your predictable, steady-state compute demand. Use Cost Explorer's Savings Plans recommendations to identify the optimal hourly commitment.</li>
+    <li><strong>20-30% On-Demand and Spot Instances:</strong> Reserve this capacity for burst workloads, development environments, and fault-tolerant batch processing.</li>
+</ul>
+
+<div class="callout callout-tip">
+    <div class="callout-title">Tip: Commitment Purchase Timing</div>
+    <p>
+        Do not purchase Savings Plans or Reserved Instances immediately after migration. Allow <strong>30-60 days of stabilization</strong> to establish accurate utilization baselines in your new AWS environment. Premature commitments based on GCP usage patterns frequently result in stranded reservations when workloads are right-sized. Use Cost Explorer's Savings Plans recommendations engine only after your utilization patterns have normalized.
+    </p>
+</div>
+
+<h2>4. Spot Instances for Fault-Tolerant Workloads</h2>
+
+<p>
+    AWS Spot Instances provide access to spare EC2 capacity at discounts of <strong>up to 90%</strong> compared to On-Demand pricing. The average interruption rate across all instance types and regions is approximately <strong>5%</strong>, making Spot viable for a broad range of workloads when combined with proper fault-tolerance patterns.
+</p>
+
+<p>
+    Ideal Spot candidates include CI/CD pipelines, data processing jobs, batch rendering, machine learning training, and stateless web application tiers behind Auto Scaling Groups. Use <strong>EC2 Fleet</strong> or <strong>Spot Fleet</strong> with capacity-optimized allocation strategy to diversify across multiple instance types and Availability Zones, minimizing interruption risk.
+</p>
+
+<pre><code># Example: Launch a diversified Spot Fleet
+aws ec2 request-spot-fleet --spot-fleet-request-config '{
+    "AllocationStrategy": "capacityOptimized",
+    "TargetCapacity": 10,
+    "IamFleetRole": "arn:aws:iam::role/spot-fleet-role",
+    "LaunchSpecifications": [
+        {"InstanceType": "m5.xlarge", "SubnetId": "subnet-abc123"},
+        {"InstanceType": "m5a.xlarge", "SubnetId": "subnet-abc123"},
+        {"InstanceType": "m5d.xlarge", "SubnetId": "subnet-def456"},
+        {"InstanceType": "m6i.xlarge", "SubnetId": "subnet-def456"}
+    ]
+}'</code></pre>
+
+<h2>5. Storage Cost Optimization</h2>
+
+<h3>S3 Intelligent-Tiering</h3>
+
+<p>
+    Amazon S3 Intelligent-Tiering automatically moves objects between access tiers based on observed access patterns, delivering <strong>40-60% storage cost savings</strong> with zero retrieval fees and no operational overhead. This is the recommended default storage class for data with unpredictable or changing access patterns migrated from Google Cloud Storage.
+</p>
+
+<h3>Lifecycle Policies</h3>
+
+<p>
+    For data with well-understood access patterns, implement explicit lifecycle rules to transition objects through progressively cheaper storage classes:
+</p>
+
+<ul>
+    <li><strong>Day 0-30:</strong> S3 Standard &mdash; frequent access, lowest latency</li>
+    <li><strong>Day 30:</strong> Transition to S3 Standard-IA (Infrequent Access) &mdash; ~45% cheaper, per-retrieval fee</li>
+    <li><strong>Day 90:</strong> Transition to S3 Glacier Instant Retrieval &mdash; ~68% cheaper than Standard, millisecond retrieval</li>
+    <li><strong>Day 180:</strong> Transition to S3 Glacier Deep Archive &mdash; ~95% cheaper than Standard, 12-hour retrieval</li>
+</ul>
+
+<h3>EBS Optimization</h3>
+
+<p>
+    Elastic Block Store (EBS) volumes are a common source of waste. Conduct a monthly audit to identify and <strong>delete unattached volumes</strong> &mdash; these accumulate when EC2 instances are terminated but their volumes are retained. Additionally, convert legacy <strong>gp2 volumes to gp3</strong>, which delivers the same baseline performance at a <strong>20% lower price point</strong> while offering independently configurable IOPS and throughput.
+</p>
+
+<pre><code># Find unattached EBS volumes
+aws ec2 describe-volumes \
+    --filters "Name=status,Values=available" \
+    --query 'Volumes[*].{ID:VolumeId,Size:Size,Created:CreateTime}' \
+    --output table</code></pre>
+
+<h2>6. Comprehensive Cost Optimization Reference</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Optimization Strategy</th>
+            <th>Target Resource</th>
+            <th>Expected Savings</th>
+            <th>Implementation Effort</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Right-sizing (Compute Optimizer)</td>
+            <td>EC2 Instances</td>
+            <td>25% average</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>Compute Savings Plans</td>
+            <td>EC2, Fargate, Lambda</td>
+            <td>Up to 66%</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>EC2 Reserved Instances</td>
+            <td>EC2 Instances</td>
+            <td>Up to 72%</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>Spot Instances</td>
+            <td>EC2 (fault-tolerant)</td>
+            <td>Up to 90%</td>
+            <td>Medium</td>
+        </tr>
+        <tr>
+            <td>S3 Intelligent-Tiering</td>
+            <td>Object Storage</td>
+            <td>40-60%</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>S3 Lifecycle Policies</td>
+            <td>Object Storage</td>
+            <td>Up to 95% (Deep Archive)</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>gp2 to gp3 Migration</td>
+            <td>EBS Volumes</td>
+            <td>20%</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>Delete Unattached EBS</td>
+            <td>EBS Volumes</td>
+            <td>100% (waste elimination)</td>
+            <td>Low</td>
+        </tr>
+        <tr>
+            <td>FinOps Practice (combined)</td>
+            <td>Entire Cloud Estate</td>
+            <td>20-40% within 90 days</td>
+            <td>Medium-High</td>
+        </tr>
+    </tbody>
+</table>
+
+<hr>
+
+<div class="key-takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+        <li>Implement a FinOps practice with cross-functional ownership to achieve <strong>20-40% cost savings within 90 days</strong> of migration.</li>
+        <li>Right-size compute resources using AWS Compute Optimizer; compute represents 60-70% of total spend and yields an average 25% reduction.</li>
+        <li>Cover 70-80% of baseline compute with Savings Plans for flexibility across instance families, sizes, and regions, but wait 30-60 days post-migration before purchasing commitments.</li>
+        <li>Deploy Spot Instances (up to 90% savings) for fault-tolerant workloads using diversified capacity-optimized fleets.</li>
+        <li>Enable S3 Intelligent-Tiering for 40-60% storage savings, implement lifecycle policies for known access patterns, and audit EBS volumes monthly for waste.</li>
+        <li>Cost optimization is a continuous discipline &mdash; automate governance with AWS Budgets, anomaly detection, and scheduled right-sizing reviews.</li>
+    </ul>
+</div>
+
+</body>
+</html>

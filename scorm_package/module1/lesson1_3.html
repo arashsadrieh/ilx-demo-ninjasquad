@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Portfolio Analysis and Wave Planning</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+    <div class="module-badge">Module 1 — Lesson 3</div>
+    <h1>Application Portfolio Analysis and Wave Planning</h1>
+    <div class="reading-time">8 min read</div>
+
+    <p>
+        Before a single workload moves from GCP to AWS, the migration team must answer two foundational questions:
+        <em>What exactly are we moving?</em> and <em>In what order?</em> Application Portfolio Analysis provides
+        the answer to the first question by cataloging every workload, its dependencies, and its optimal migration
+        strategy. Wave Planning answers the second by organizing workloads into sequenced migration batches that
+        minimize risk, maximize learning, and maintain business continuity. Together, these disciplines transform
+        a chaotic "lift everything at once" impulse into a disciplined, repeatable execution framework.
+    </p>
+
+    <h2>1. The 6R Migration Strategy Framework</h2>
+
+    <p>
+        Originally introduced by Gartner and popularized by AWS, the <strong>6R framework</strong> classifies every
+        application into one of six migration strategies. Each strategy represents a different trade-off between
+        migration speed, cost, and post-migration optimization potential. The classification decision for each
+        application should be made collaboratively between the migration team, application owners, and architecture
+        reviewers.
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Strategy</th>
+                <th>Description</th>
+                <th>Typical Share</th>
+                <th>Effort Level</th>
+                <th>When to Use</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Rehost</strong> (Lift &amp; Shift)</td>
+                <td>Move the application as-is to AWS with minimal changes. GCE VMs become EC2 instances;
+                    storage volumes migrate to EBS.</td>
+                <td>30&ndash;40%</td>
+                <td>Low</td>
+                <td>Legacy applications, time-sensitive migrations, applications with no active development team</td>
+            </tr>
+            <tr>
+                <td><strong>Replatform</strong> (Lift &amp; Optimize)</td>
+                <td>Make targeted optimizations during migration without changing core architecture.
+                    Example: Cloud SQL &rarr; Aurora, GKE manifests &rarr; EKS with minor adjustments.</td>
+                <td>20&ndash;30%</td>
+                <td>Medium</td>
+                <td>Applications that benefit from managed services, databases needing performance upgrades</td>
+            </tr>
+            <tr>
+                <td><strong>Repurchase</strong> (Drop &amp; Shop)</td>
+                <td>Replace the existing application with a SaaS or marketplace alternative.
+                    Example: Custom CRM &rarr; Salesforce, custom monitoring &rarr; Datadog.</td>
+                <td>5&ndash;10%</td>
+                <td>Variable</td>
+                <td>Applications with mature SaaS alternatives, undifferentiated capabilities</td>
+            </tr>
+            <tr>
+                <td><strong>Refactor</strong> (Re-architect)</td>
+                <td>Significantly redesign the application to be cloud-native on AWS. Adopt serverless,
+                    microservices, event-driven patterns.</td>
+                <td>10&ndash;20%</td>
+                <td>High</td>
+                <td>Strategic applications requiring scalability, applications with technical debt that
+                    justifies investment</td>
+            </tr>
+            <tr>
+                <td><strong>Retire</strong></td>
+                <td>Decommission the application entirely. Turn it off, archive data, and redirect users.</td>
+                <td>10&ndash;15%</td>
+                <td>Low</td>
+                <td>Redundant applications, unused services, end-of-life systems</td>
+            </tr>
+            <tr>
+                <td><strong>Retain</strong> (Revisit Later)</td>
+                <td>Keep the application on GCP for now. Defer migration due to complexity, compliance,
+                    or dependency constraints.</td>
+                <td>5&ndash;15%</td>
+                <td>None (deferred)</td>
+                <td>Applications with deep GCP-native dependencies (e.g., Spanner, BigQuery ML),
+                    applications under active GCP CUD commitments</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="callout callout-info">
+        <div class="callout-title">Distribution Insight</div>
+        <p>
+            In a typical enterprise migration, <strong>Rehost and Replatform together account for 50&ndash;70%</strong>
+            of the application portfolio. This means the majority of your migration effort is relatively well-understood
+            and can be executed with established patterns and tooling. The remaining 30&ndash;50% requires more nuanced
+            decision-making around Refactor, Repurchase, Retire, and Retain strategies.
+        </p>
+    </div>
+
+    <h2>2. Discovery: Building the Application Inventory</h2>
+
+    <p>
+        You cannot classify what you have not inventoried. The discovery phase produces a comprehensive catalog of
+        every application, service, database, and infrastructure component in your GCP environment, along with their
+        interdependencies, resource utilization patterns, and business metadata. Three categories of discovery tools
+        are commonly deployed:
+    </p>
+
+    <h3>Agent-Based Discovery</h3>
+    <p>
+        <strong>AWS Application Discovery Service (ADS)</strong> deploys lightweight agents on GCE instances to
+        collect detailed information including CPU/memory/disk utilization, running processes, network connections,
+        and TCP dependency mapping. The agent-based approach provides the highest fidelity data but requires
+        installation on each instance.
+    </p>
+
+    <pre><code># Install AWS Discovery Agent on a Linux GCE instance
+curl -o aws-discovery-agent.tar.gz \
+  https://s3-us-west-2.amazonaws.com/aws-discovery-agent.linux/latest/aws-discovery-agent.tar.gz
+
+tar -xzf aws-discovery-agent.tar.gz
+sudo bash install -r us-west-2 \
+  -k &lt;ACCESS_KEY_ID&gt; \
+  -s &lt;SECRET_ACCESS_KEY&gt; \
+  -p true \
+  -c true</code></pre>
+
+    <h3>Agentless Discovery</h3>
+    <p>
+        For environments where agent installation is impractical (production databases, compliance-restricted zones),
+        agentless discovery uses API-based collection. <strong>AWS Agentless Discovery Connector</strong> integrates
+        with vCenter for VMware environments; for GCP-native workloads, use the <strong>GCP Asset Inventory API</strong>
+        to export a complete resource manifest, then import into <strong>AWS Migration Hub</strong> for analysis.
+    </p>
+
+    <pre><code># Export GCP asset inventory for migration planning
+gcloud asset export \
+  --organization=123456789 \
+  --content-type=resource \
+  --output-path=gs://migration-staging/gcp-asset-inventory.json \
+  --asset-types="compute.googleapis.com/Instance,\
+sqladmin.googleapis.com/Instance,\
+container.googleapis.com/Cluster,\
+storage.googleapis.com/Bucket"</code></pre>
+
+    <h3>Third-Party Discovery Platforms</h3>
+    <p>
+        Enterprise-grade discovery platforms provide richer analysis, automated dependency mapping, and 6R
+        recommendation engines:
+    </p>
+    <ul>
+        <li><strong>CloudAmize:</strong> AI-driven discovery with automatic 6R classification, right-sizing
+            recommendations, and cost projections. Supports both GCP and AWS as source/target platforms.</li>
+        <li><strong>Turbonomic (IBM):</strong> Application Resource Management platform that maps dependencies
+            in real time and provides migration workload placement recommendations based on performance and
+            cost optimization.</li>
+        <li><strong>Flexera One:</strong> Multi-cloud management platform with discovery, cost optimization,
+            and governance capabilities. Particularly strong for hybrid and multi-cloud environments.</li>
+        <li><strong>CAST Highlight:</strong> Software intelligence platform that analyzes application source
+            code to assess cloud readiness, technical debt, and refactoring effort.</li>
+    </ul>
+
+    <h2>3. Prioritization Matrices</h2>
+
+    <p>
+        Once the inventory is complete and each application has a preliminary 6R classification, the next step is
+        prioritization. Not all applications can (or should) migrate simultaneously. A <strong>prioritization
+        matrix</strong> scores each application across multiple dimensions to determine its position in the
+        migration sequence. The four primary dimensions are:
+    </p>
+
+    <ol>
+        <li><strong>Business Value:</strong> How critical is this application to revenue generation, customer
+            experience, or regulatory compliance? High-value applications need the most careful migration planning
+            but also deliver the greatest ROI when optimized on AWS.</li>
+        <li><strong>Technical Complexity:</strong> How many dependencies does the application have? Does it use
+            GCP-proprietary services (Spanner, BigQuery ML, Apigee) that lack direct AWS equivalents? Complex
+            applications require more planning, testing, and rollback provisions.</li>
+        <li><strong>Compliance and Data Sensitivity:</strong> Does the application process PII, PHI, PCI, or
+            other regulated data? Compliance-sensitive workloads require additional security reviews, data
+            residency verification, and audit trail preservation during migration.</li>
+        <li><strong>Team Readiness:</strong> Does the application team have AWS experience? Are they available
+            to support migration testing and cutover? Applications owned by teams with AWS skills migrate faster
+            and with fewer incidents.</li>
+    </ol>
+
+    <p>
+        Score each dimension on a 1&ndash;5 scale (1 = low, 5 = high). Applications with
+        <strong>high business value, low technical complexity, low compliance sensitivity, and high team
+        readiness</strong> are ideal early-wave candidates. Applications scoring high on complexity and compliance
+        are deferred to later waves when the team has built confidence and refined runbooks.
+    </p>
+
+    <h2>4. Wave Planning Methodology</h2>
+
+    <p>
+        Wave planning organizes the prioritized application inventory into sequenced migration batches, each
+        with defined scope, timeline, success criteria, and rollback procedures. The standard wave progression
+        follows four phases:
+    </p>
+
+    <h3>Wave 1: Pilot (Weeks 1&ndash;4)</h3>
+
+    <div class="callout callout-tip">
+        <div class="callout-title">The Pilot Wave Is Your Most Important Wave</div>
+        <p>
+            Select <strong>2&ndash;3 low-risk, low-complexity applications</strong> for the pilot wave. The goal
+            is <em>not</em> to migrate critical workloads&mdash;it is to validate your migration tooling, test your
+            network connectivity between GCP and AWS, verify IAM and security configurations, train the team on
+            operational procedures, and establish baseline metrics for estimating future wave timelines. A successful
+            pilot wave de-risks every subsequent wave. Invest heavily in documentation and retrospectives during
+            this phase.
+        </p>
+    </div>
+
+    <p>
+        Pilot wave applications should be stateless or have simple data migration requirements. Good candidates
+        include internal tools, development/staging environments, static websites, and batch-processing jobs.
+        Measure and record: migration duration, downtime (if any), data integrity validation results, and
+        post-migration performance comparison.
+    </p>
+
+    <h3>Wave 2: Foundation (Weeks 5&ndash;12)</h3>
+    <p>
+        The foundation wave migrates <strong>10&ndash;15 applications</strong> that establish the core
+        infrastructure patterns for the rest of the migration. This includes:
+    </p>
+    <ul>
+        <li>Shared services: Active Directory/LDAP, DNS, monitoring, logging, CI/CD pipelines</li>
+        <li>Networking backbone: Transit Gateway, VPN/Direct Connect to on-premises, VPC peering to GCP</li>
+        <li>Security infrastructure: AWS Config rules, GuardDuty, Security Hub, WAF policies</li>
+        <li>First production workloads: Medium-complexity applications that validate the landing zone architecture</li>
+    </ul>
+
+    <h3>Wave 3: Production (Weeks 13&ndash;36)</h3>
+    <p>
+        The production wave is the largest phase, migrating the bulk of the application portfolio in
+        <strong>sub-waves of 15&ndash;25 applications each</strong>, executed every 2&ndash;3 weeks. Each sub-wave
+        follows a standardized runbook:
+    </p>
+    <ol>
+        <li><strong>Pre-migration validation:</strong> Confirm AWS target resources are provisioned, IAM roles
+            are configured, and network routes are verified.</li>
+        <li><strong>Data replication:</strong> Initiate continuous replication using AWS DMS (databases),
+            DataSync (files), or S3 Transfer Acceleration (objects).</li>
+        <li><strong>Cutover window:</strong> Execute DNS switch, validate data integrity, run smoke tests,
+            and monitor for 24&ndash;48 hours.</li>
+        <li><strong>Post-migration optimization:</strong> Right-size instances, apply Reserved Instance or
+            Savings Plan coverage, and tune auto-scaling policies.</li>
+    </ol>
+
+    <h3>Wave 4: Optimization (Weeks 37&ndash;52)</h3>
+    <p>
+        The final wave focuses on the remaining high-complexity applications (Refactor candidates) and
+        post-migration optimization across the entire portfolio. Activities include:
+    </p>
+    <ul>
+        <li>Refactoring monoliths into microservices on EKS or Lambda</li>
+        <li>Migrating analytics workloads from BigQuery to Redshift or Athena</li>
+        <li>Implementing cost governance with AWS Cost Explorer, Budgets, and Trusted Advisor</li>
+        <li>Decommissioning GCP resources and terminating GCP contracts</li>
+        <li>Conducting a comprehensive migration retrospective and documenting lessons learned</li>
+    </ul>
+
+    <h2>5. Migration Readiness Assessment (MRA)</h2>
+
+    <p>
+        The AWS <strong>Migration Readiness Assessment</strong> is a structured evaluation framework that scores
+        your organization's preparedness across <strong>seven dimensions</strong>. Each dimension is scored on a
+        1&ndash;5 maturity scale. Organizations should target a minimum score of 3 in each dimension before
+        beginning production migration waves.
+    </p>
+
+    <table>
+        <thead>
+            <tr>
+                <th>MRA Dimension</th>
+                <th>What It Measures</th>
+                <th>Target Score</th>
+                <th>Common Gaps</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><strong>Business Case</strong></td>
+                <td>Financial justification, TCO model completeness, executive sponsorship</td>
+                <td>3+</td>
+                <td>Missing hidden costs, lack of C-suite buy-in</td>
+            </tr>
+            <tr>
+                <td><strong>Landing Zone</strong></td>
+                <td>AWS account structure, networking, security baseline, governance controls</td>
+                <td>4+</td>
+                <td>Flat account structure, missing SCPs, no centralized logging</td>
+            </tr>
+            <tr>
+                <td><strong>Discovery &amp; Planning</strong></td>
+                <td>Application inventory completeness, dependency mapping, 6R classification</td>
+                <td>3+</td>
+                <td>Incomplete inventory, undocumented dependencies, no discovery tooling</td>
+            </tr>
+            <tr>
+                <td><strong>Security &amp; Compliance</strong></td>
+                <td>IAM strategy, encryption standards, compliance framework mapping (SOC2, HIPAA, PCI)</td>
+                <td>4+</td>
+                <td>GCP-specific compliance controls not mapped to AWS equivalents</td>
+            </tr>
+            <tr>
+                <td><strong>Operations</strong></td>
+                <td>Monitoring, alerting, incident response, runbook maturity, on-call processes</td>
+                <td>3+</td>
+                <td>GCP-native monitoring not replicated on AWS, missing CloudWatch dashboards</td>
+            </tr>
+            <tr>
+                <td><strong>People &amp; Skills</strong></td>
+                <td>AWS certification levels, training plans, staffing adequacy, partner engagement</td>
+                <td>3+</td>
+                <td>Team is 100% GCP-certified with no AWS training, no migration partner</td>
+            </tr>
+            <tr>
+                <td><strong>Migration Experience</strong></td>
+                <td>Prior migration history, tooling maturity, runbook availability, automation level</td>
+                <td>3+</td>
+                <td>First-time migration, manual processes, no IaC templates</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <pre><code># Example: MRA scoring output (simplified)
+mra_scores = {
+    "business_case":        4,
+    "landing_zone":         3,
+    "discovery_planning":   4,
+    "security_compliance":  3,
+    "operations":           2,   # Gap: monitoring not yet replicated
+    "people_skills":        2,   # Gap: team needs AWS training
+    "migration_experience": 1    # Gap: first cloud-to-cloud migration
+}
+
+avg_score = sum(mra_scores.values()) / len(mra_scores)
+print(f"Overall MRA Score: {avg_score:.1f}/5.0")
+# Output: Overall MRA Score: 2.7/5.0
+
+# Recommendation: Address Operations, People & Skills, and
+# Migration Experience gaps before entering Wave 2 (Foundation)</code></pre>
+
+    <div class="callout callout-warning">
+        <div class="callout-title">Do Not Skip the MRA</div>
+        <p>
+            Organizations that begin production migration waves with MRA scores below 3.0 in critical dimensions
+            (particularly Landing Zone, Security, and Operations) experience <strong>2.4x more migration
+            incidents</strong> and <strong>40% longer timelines</strong> on average, according to AWS Professional
+            Services benchmarks. Invest the 2&ndash;4 weeks needed to close gaps before accelerating.
+        </p>
+    </div>
+
+    <h2>6. Putting It All Together</h2>
+
+    <p>
+        Application Portfolio Analysis and Wave Planning are not one-time exercises. The migration backlog is
+        a living artifact that evolves as discovery reveals new dependencies, business priorities shift, and the
+        team's AWS expertise matures. Schedule <strong>weekly backlog refinement sessions</strong> with
+        application owners, infrastructure leads, and the migration program manager. Update 6R classifications
+        as new information emerges. Re-score prioritization matrices after each wave retrospective. The teams
+        that treat migration as a disciplined, iterative process&mdash;rather than a one-shot project&mdash;are
+        the teams that deliver on time, on budget, and without service disruptions.
+    </p>
+
+    <hr>
+
+    <div class="key-takeaways">
+        <h3>Key Takeaways</h3>
+        <ul>
+            <li>The 6R framework (Rehost, Replatform, Repurchase, Refactor, Retire, Retain) provides a structured
+                classification for every application in your portfolio. Rehost and Replatform typically account for
+                50&ndash;70% of workloads.</li>
+            <li>Discovery tools&mdash;AWS Application Discovery Service, CloudAmize, Turbonomic&mdash;automate
+                inventory collection and dependency mapping. Never rely on manual spreadsheets for enterprise-scale
+                migrations.</li>
+            <li>Prioritization matrices scoring business value, technical complexity, compliance sensitivity, and
+                team readiness determine which applications migrate first.</li>
+            <li>Wave planning follows four phases: Pilot (validate tooling), Foundation (establish infrastructure),
+                Production (bulk migration), and Optimization (refactor and tune).</li>
+            <li>The pilot wave is the most important wave. Select 2&ndash;3 low-risk applications, document
+                everything, and use the results to calibrate timelines for subsequent waves.</li>
+            <li>The Migration Readiness Assessment (MRA) scores organizational preparedness across 7 dimensions.
+                Target a minimum score of 3 in each dimension before beginning production waves to avoid
+                2.4x incident rate increases.</li>
+        </ul>
+    </div>
+
+</body>
+</html>

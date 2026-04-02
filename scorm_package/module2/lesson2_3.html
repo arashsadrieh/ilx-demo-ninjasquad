@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Cutover and Validation Procedures</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+<span class="module-badge">Module 2 &mdash; Lesson 3</span>
+<h1>Application Cutover and Validation Procedures</h1>
+<p class="reading-time">8 min read</p>
+
+<p>
+    The cutover phase is the culmination of months of planning, infrastructure provisioning, and data migration. It is
+    also the moment of highest organizational risk. Research from Gartner and the Cloud Industry Forum consistently shows
+    that migrations using <strong>structured cutover methodologies achieve a 68% success rate</strong>, compared to only
+    <strong>34% for ad-hoc approaches</strong>&mdash;a 2x improvement that underscores the value of rigorous planning.
+    This lesson provides a step-by-step framework for DNS-based traffic shifting, database cutover procedures, validation
+    checklists, and post-cutover hypercare operations.
+</p>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-value">68%</div>
+        <div class="stat-label">Success rate with structured methodology</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">34%</div>
+        <div class="stat-label">Success rate with ad-hoc approach</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">2x</div>
+        <div class="stat-label">Improvement factor</div>
+    </div>
+</div>
+
+<h2>1. DNS-Based Traffic Shifting with Route 53</h2>
+
+<p>
+    Rather than performing a single "big bang" cutover, best practice dictates a <strong>gradual traffic shift</strong>
+    using DNS-level controls. Amazon Route 53 weighted routing policies allow you to split traffic between the existing
+    GCP endpoints and the new AWS endpoints by assigning percentage weights to each record set. This approach provides a
+    built-in rollback mechanism: if the AWS environment exhibits problems, you simply shift the weight back to GCP.
+</p>
+
+<p>
+    The traffic shifting follows a <strong>blue-green deployment pattern</strong>. The GCP environment (blue) continues
+    serving production traffic while the AWS environment (green) receives an increasing share. At any point during the
+    ramp-up, the blue environment can resume 100% of traffic within the TTL propagation window (typically 60&ndash;300
+    seconds).
+</p>
+
+<h3>Traffic Shifting Phases</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>Phase</th>
+            <th>AWS Weight</th>
+            <th>GCP Weight</th>
+            <th>Duration</th>
+            <th>Validation Gate</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Phase 0: Baseline</strong></td>
+            <td>0%</td>
+            <td>100%</td>
+            <td>&mdash;</td>
+            <td>All pre-cutover checks pass</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 1: Canary</strong></td>
+            <td>10%</td>
+            <td>90%</td>
+            <td>2&ndash;4 hours</td>
+            <td>Error rate &lt; 0.5%, latency within baseline</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 2: Early Adoption</strong></td>
+            <td>25%</td>
+            <td>75%</td>
+            <td>4&ndash;8 hours</td>
+            <td>No P1/P2 incidents, database replication healthy</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 3: Majority</strong></td>
+            <td>50%</td>
+            <td>50%</td>
+            <td>12&ndash;24 hours</td>
+            <td>Performance parity confirmed, all integrations verified</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 4: Near-Complete</strong></td>
+            <td>75%</td>
+            <td>25%</td>
+            <td>24&ndash;48 hours</td>
+            <td>Cost metrics within forecast, no data discrepancies</td>
+        </tr>
+        <tr>
+            <td><strong>Phase 5: Full Cutover</strong></td>
+            <td>100%</td>
+            <td>0%</td>
+            <td>Permanent</td>
+            <td>All validation categories green for 24+ hours</td>
+        </tr>
+    </tbody>
+</table>
+
+<pre><code># Route 53 weighted routing: Phase 1 (10% to AWS)
+aws route53 change-resource-record-sets \
+  --hosted-zone-id Z1234567890ABC \
+  --change-batch '{
+    "Changes": [
+      {
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+          "Name": "app.example.com",
+          "Type": "A",
+          "SetIdentifier": "aws-target",
+          "Weight": 10,
+          "AliasTarget": {
+            "HostedZoneId": "Z35SXDOTRQ7X7K",
+            "DNSName": "migration-alb-123456.us-east-1.elb.amazonaws.com",
+            "EvaluateTargetHealth": true
+          }
+        }
+      },
+      {
+        "Action": "UPSERT",
+        "ResourceRecordSet": {
+          "Name": "app.example.com",
+          "Type": "A",
+          "SetIdentifier": "gcp-source",
+          "Weight": 90,
+          "AliasTarget": {
+            "HostedZoneId": "Z1234567890GCP",
+            "DNSName": "gcp-lb.example.com",
+            "EvaluateTargetHealth": true
+          }
+        }
+      }
+    ]
+  }'</code></pre>
+
+<h2>2. Database Cutover via Read Replica Promotion</h2>
+
+<p>
+    Database cutover is the most latency-sensitive operation during migration. The recommended strategy uses a
+    <strong>read replica promotion</strong> approach that minimizes the write-unavailability window to minutes rather
+    than hours:
+</p>
+
+<ol>
+    <li><strong>Verify replication lag &lt; 5 seconds</strong> on the AWS DMS task. Monitor the
+        <code>CDCLatencyTarget</code> CloudWatch metric continuously for the 30 minutes preceding cutover.</li>
+    <li><strong>Enable application read-only mode</strong> by toggling a feature flag or deploying a maintenance
+        page. This stops all write operations to the GCP source database.</li>
+    <li><strong>Wait for DMS replication to fully catch up</strong> (lag = 0 seconds). This typically takes
+        10&ndash;60 seconds after writes stop, depending on the final transaction batch size.</li>
+    <li><strong>Stop the DMS task</strong> and run a final row-count and checksum validation between source and
+        target databases. Use table-level <code>COUNT(*)</code> and <code>CHECKSUM</code> aggregations.</li>
+    <li><strong>Promote the AWS RDS instance</strong> from replica to standalone primary, update application
+        connection strings (via AWS Secrets Manager rotation or environment variable update), and disable
+        read-only mode. The application is now writing to AWS.</li>
+</ol>
+
+<p>
+    The total write-unavailability window using this approach is typically <strong>2&ndash;5 minutes</strong> for
+    databases under 500 GB. For larger databases, consider splitting into per-schema DMS tasks to parallelize the
+    final catch-up verification.
+</p>
+
+<h2>3. Validation Procedures</h2>
+
+<p>
+    Post-cutover validation must be systematic, not ad-hoc. We define five validation categories, each with specific
+    pass/fail criteria:
+</p>
+
+<h3>Validation Category Matrix</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>Category</th>
+            <th>Method</th>
+            <th>Tools</th>
+            <th>Pass Criteria</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Functionality</strong></td>
+            <td>End-to-end test suite execution</td>
+            <td>Selenium WebDriver, Cypress</td>
+            <td>100% of critical path tests pass</td>
+        </tr>
+        <tr>
+            <td><strong>Performance</strong></td>
+            <td>Load test at 120% peak traffic</td>
+            <td>Apache JMeter, Gatling</td>
+            <td>p95 latency within 10% of GCP baseline</td>
+        </tr>
+        <tr>
+            <td><strong>Data Reconciliation</strong></td>
+            <td>Row counts, checksums, sampling</td>
+            <td>Custom SQL scripts, AWS Glue</td>
+            <td>100% row count match, 99.99% checksum match</td>
+        </tr>
+        <tr>
+            <td><strong>Security</strong></td>
+            <td>Vulnerability scan, IAM audit</td>
+            <td>AWS Inspector, Prowler</td>
+            <td>No critical/high findings, IAM least-privilege verified</td>
+        </tr>
+        <tr>
+            <td><strong>Integration</strong></td>
+            <td>Third-party API and service connectivity</td>
+            <td>Postman collections, synthetic monitors</td>
+            <td>All integration endpoints responding within SLA</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    <strong>Automated testing</strong> is non-negotiable for cutover validation. Selenium WebDriver scripts should cover
+    every critical user journey (login, core transactions, data retrieval, payment flows). Apache JMeter load tests
+    should simulate at least 120% of observed peak traffic to establish performance headroom. These tests must be
+    pre-built and validated against the GCP environment before cutover day, so that any test failures on AWS can be
+    attributed to the migration rather than test defects.
+</p>
+
+<h2>4. Post-Cutover Hypercare Phase</h2>
+
+<div class="callout callout-tip">
+    <div class="callout-title">Tip: Hypercare Best Practices</div>
+    <p>
+        The hypercare phase should last <strong>7 to 14 days</strong> following full cutover. During this period,
+        maintain the GCP environment in a warm standby state&mdash;do not decommission any GCP resources until hypercare
+        concludes successfully. Staff a dedicated <strong>war room</strong> (physical or virtual) with representatives
+        from infrastructure, application development, database administration, security, and business operations for at
+        least the first 72 hours. After the initial 72-hour intensive period, transition to an on-call rotation with
+        15-minute response SLAs for the remainder of the hypercare window.
+    </p>
+</div>
+
+<h3>CloudWatch Monitoring and Alarm Configuration</h3>
+
+<p>
+    During hypercare, every production metric must be monitored against dynamically calculated baselines. The recommended
+    approach for alarm thresholds is <strong>mean + 2 standard deviations</strong>, calculated from the first 48 hours of
+    AWS production traffic. This statistical approach avoids both false positives (thresholds too tight) and missed
+    incidents (thresholds too loose).
+</p>
+
+<pre><code># CloudWatch alarm: API latency anomaly detection
+aws cloudwatch put-metric-alarm \
+  --alarm-name "migration-api-latency-anomaly" \
+  --metric-name "TargetResponseTime" \
+  --namespace "AWS/ApplicationELB" \
+  --statistic "Average" \
+  --period 300 \
+  --evaluation-periods 3 \
+  --threshold 0.850 \
+  --comparison-operator "GreaterThanThreshold" \
+  --dimensions Name=LoadBalancer,Value=app/migration-alb/1234567890 \
+  --alarm-actions arn:aws:sns:us-east-1:123456789012:migration-alerts \
+  --treat-missing-data "breaching"
+
+# CloudWatch dashboard for hypercare (key widgets)
+# - ALB request count & error rates (4xx, 5xx)
+# - Target group healthy/unhealthy host counts
+# - RDS CPU, connections, read/write latency, replication lag
+# - Application-level business metrics (transactions/min, revenue/hour)
+# - DMS replication lag (if GCP sync still active for rollback)</code></pre>
+
+<h3>Rollback Decision Triggers</h3>
+
+<p>
+    Rollback decisions must be based on objective, measurable criteria&mdash;not subjective assessment. Define these
+    triggers before cutover and ensure all stakeholders agree:
+</p>
+
+<ul>
+    <li><strong>Error rate trigger:</strong> A <strong>5% increase in error rate</strong> (5xx responses) compared
+        to the GCP baseline, sustained over a <strong>15-minute evaluation window</strong></li>
+    <li><strong>Latency trigger:</strong> A <strong>20% degradation in p95 latency</strong> compared to the GCP
+        baseline, sustained over a <strong>15-minute evaluation window</strong></li>
+    <li><strong>Data integrity trigger:</strong> Any confirmed data loss or corruption event, regardless of scope</li>
+    <li><strong>Security trigger:</strong> Any active exploitation or critical vulnerability discovered in the
+        AWS environment</li>
+    <li><strong>Business trigger:</strong> Revenue-impacting defects confirmed by business stakeholders</li>
+</ul>
+
+<p>
+    If any trigger fires, the <strong>rollback procedure</strong> is: shift Route 53 weights back to 100% GCP within
+    60 seconds, stop all DMS replication tasks, and convene the war room to assess root cause before re-attempting.
+</p>
+
+<h2>5. War Room Procedures</h2>
+
+<p>
+    The war room is the command center during cutover and hypercare. Effective war room operations require:
+</p>
+
+<ul>
+    <li><strong>Escalation paths:</strong> Define a three-tier escalation matrix&mdash;L1 (on-call engineer, 5-minute
+        response), L2 (team lead, 15-minute response), L3 (VP Engineering / CTO, 30-minute response). Every tier must
+        have a primary and backup contact with confirmed availability during the cutover window.</li>
+    <li><strong>Communication templates:</strong> Pre-draft templates for stakeholder updates at each phase transition:
+        "Cutover Phase X initiated," "Validation gate passed/failed," "Rollback initiated," and "Cutover complete."
+        Templates reduce cognitive load during high-pressure situations.</li>
+    <li><strong>Decision log:</strong> Maintain a real-time, timestamped log of every decision, who made it, and the
+        rationale. This log is essential for post-mortem analysis and compliance documentation.</li>
+    <li><strong>Runbook execution:</strong> Every action during cutover must reference a specific step in the
+        pre-approved runbook. Deviations from the runbook require L2 or L3 approval.</li>
+    <li><strong>Communication cadence:</strong> Issue stakeholder status updates every 30 minutes during active
+        cutover, every 2 hours during the first 24 hours of hypercare, and daily thereafter.</li>
+</ul>
+
+<pre><code># Example: Automated Slack/Teams notification for phase transitions
+# (Triggered by CloudWatch Events or Lambda)
+
+PHASE="Phase 2: Early Adoption (25% AWS)"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+STATUS="PASSED"
+METRICS="Error rate: 0.12% | p95 latency: 245ms | DB lag: 1.2s"
+
+curl -X POST "$WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"text\": \"Migration Cutover Update\",
+    \"blocks\": [
+      {\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"$PHASE\"}},
+      {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\",
+        \"text\": \"*Status:* $STATUS\n*Time:* $TIMESTAMP\n*Metrics:* $METRICS\"}}
+    ]
+  }"</code></pre>
+
+<hr>
+
+<div class="key-takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+        <li>Structured cutover methodologies achieve a 68% success rate versus 34% for ad-hoc approaches. Invest in detailed runbooks, validation gates, and pre-defined rollback criteria before cutover day.</li>
+        <li>Use Route 53 weighted routing to gradually shift traffic from GCP to AWS in phases (10% &rarr; 25% &rarr; 50% &rarr; 75% &rarr; 100%), with explicit validation gates between each phase. This blue-green pattern enables instant rollback.</li>
+        <li>Database cutover via read replica promotion minimizes write-unavailability to 2&ndash;5 minutes. Ensure DMS replication lag is under 5 seconds before initiating the cutover sequence.</li>
+        <li>Validate across five categories post-cutover: functionality (Selenium), performance (JMeter at 120% peak), data reconciliation (row counts and checksums), security (Inspector/Prowler), and integration (synthetic monitors).</li>
+        <li>Maintain a 7&ndash;14 day hypercare phase with CloudWatch alarms set at mean + 2 standard deviations. Define objective rollback triggers: 5% error rate increase or 20% latency degradation sustained over 15 minutes. Keep GCP in warm standby until hypercare concludes.</li>
+    </ul>
+</div>
+
+</body>
+</html>

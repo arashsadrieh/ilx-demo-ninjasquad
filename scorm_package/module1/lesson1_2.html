@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive GCP-to-AWS Service Mapping</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+    <div class="module-badge">Module 1 — Lesson 2</div>
+    <h1>Comprehensive GCP-to-AWS Service Mapping</h1>
+    <div class="reading-time">8 min read</div>
+
+    <p>
+        A precise, service-level mapping between Google Cloud Platform and Amazon Web Services is the foundation
+        of any credible migration plan. While many services share conceptual overlap&mdash;both providers offer
+        virtual machines, object storage, and managed databases&mdash;the implementation details, configuration
+        models, and operational behaviors differ in ways that can introduce subtle bugs, performance regressions,
+        and cost surprises if not carefully addressed. This lesson provides a comprehensive reference mapping
+        across compute, storage, database, networking, and identity and access management (IAM) domains, along
+        with practical guidance on the nuances that matter most during migration.
+    </p>
+
+    <div class="callout callout-info">
+        <div class="callout-title">How to Use This Reference</div>
+        <p>
+            This service mapping is designed as a living reference document. Bookmark it and return to it during
+            each migration wave. Not every service requires a 1:1 migration&mdash;in many cases, the move to AWS
+            is an opportunity to <strong>re-architect</strong> rather than simply replicate. Use this mapping to
+            identify which services translate directly and which require deeper analysis.
+        </p>
+    </div>
+
+    <h2>1. Compute Services</h2>
+
+    <p>
+        Compute is typically the largest spend category and the first domain teams evaluate. The core mapping is
+        straightforward, but the details around instance diversity, pricing models, and orchestration tooling
+        diverge significantly.
+    </p>
+
+    <h3>Google Compute Engine (GCE) &rarr; Amazon EC2</h3>
+    <p>
+        Both services provide resizable virtual machines, but AWS EC2 offers <strong>475+ instance types</strong>
+        organized into families (general purpose, compute optimized, memory optimized, storage optimized,
+        accelerated computing, and HPC) compared to GCP's approximately <strong>50+ predefined machine types</strong>.
+        GCP's advantage is its <em>custom machine type</em> feature, which allows exact vCPU and memory
+        specification; AWS has no direct equivalent, though the sheer breadth of instance types often makes custom
+        sizing unnecessary.
+    </p>
+    <p>
+        Key migration considerations include:
+    </p>
+    <ul>
+        <li><strong>Live migration:</strong> GCP performs transparent live migration during host maintenance events.
+            AWS uses scheduled maintenance windows and requires instances to be stopped or migrated manually for
+            certain host events.</li>
+        <li><strong>Preemptible vs. Spot:</strong> GCP Preemptible VMs have a hard 24-hour maximum lifetime.
+            AWS Spot Instances have no hard time limit but can be reclaimed with a 2-minute warning when capacity
+            is needed.</li>
+        <li><strong>Sole-tenancy:</strong> GCP Sole-Tenant Nodes map to AWS <strong>Dedicated Hosts</strong>,
+            important for licensing compliance (e.g., Oracle, Windows Server).</li>
+    </ul>
+
+    <h3>Google Kubernetes Engine (GKE) &rarr; Amazon EKS</h3>
+    <p>
+        GKE is widely regarded as the most mature managed Kubernetes service, benefiting from Google's stewardship
+        of the Kubernetes project. Amazon EKS has closed the gap substantially and now supports <strong>Kubernetes
+        versions within 2 weeks of upstream release</strong>. Key differences: GKE includes a free control plane
+        (for Standard mode), while EKS charges <strong>$0.10/hour ($73/month)</strong> per cluster. GKE Autopilot
+        maps conceptually to <strong>AWS Fargate on EKS</strong>, both providing serverless pod execution.
+    </p>
+
+    <h3>Cloud Functions &rarr; AWS Lambda</h3>
+    <p>
+        Both are event-driven, serverless compute platforms. AWS Lambda supports <strong>15-minute maximum
+        execution time</strong> (vs. Cloud Functions' 9 minutes for 1st gen, 60 minutes for 2nd gen).
+        Lambda offers <strong>Provisioned Concurrency</strong> to eliminate cold starts&mdash;a feature critical
+        for latency-sensitive APIs. Cloud Functions 2nd gen is built on Cloud Run; the equivalent pattern on AWS
+        is <strong>Lambda with container image support</strong> (up to 10 GB images).
+    </p>
+
+    <h2>2. Storage Services</h2>
+
+    <h3>Cloud Storage &rarr; Amazon S3</h3>
+    <p>
+        Both offer object storage with high durability (11 nines). AWS S3 provides <strong>7 storage tiers</strong>
+        (Standard, Intelligent-Tiering, Standard-IA, One Zone-IA, Glacier Instant Retrieval, Glacier Flexible
+        Retrieval, Glacier Deep Archive) compared to GCP Cloud Storage's <strong>4 tiers</strong> (Standard,
+        Nearline, Coldline, Archive). The additional AWS tiers provide finer-grained cost optimization for data
+        with varied access patterns.
+    </p>
+    <p>
+        Migration tooling: Use <code>gsutil</code> or <strong>Storage Transfer Service</strong> on the GCP side,
+        paired with <code>aws s3 sync</code> or <strong>AWS DataSync</strong> on the AWS side. For transfers
+        exceeding 10 TB, consider <strong>AWS Snowball Edge</strong> to avoid prolonged egress charges.
+    </p>
+
+    <pre><code># Example: Syncing a GCS bucket to an S3 bucket using rclone
+rclone sync gcs:my-gcp-bucket s3:my-aws-bucket \
+  --transfers=32 \
+  --checkers=16 \
+  --s3-upload-concurrency=8 \
+  --gcs-bucket-policy-only \
+  --progress \
+  --log-file=/var/log/rclone-migration.log</code></pre>
+
+    <h3>Persistent Disk &rarr; Amazon EBS</h3>
+    <p>
+        GCP Persistent Disks (pd-standard, pd-balanced, pd-ssd, pd-extreme) map to AWS EBS volume types
+        (gp3, gp2, io2, io1, st1, sc1). The most important difference: GCP Persistent Disks can be attached
+        to <strong>multiple read-only instances simultaneously</strong>; AWS EBS <code>io1</code>/<code>io2</code>
+        volumes support <strong>Multi-Attach</strong> for read/write, but only within a single Availability Zone
+        and only on Nitro-based instances. For shared file storage, map <strong>GCP Filestore</strong> to
+        <strong>Amazon EFS</strong> (NFS) or <strong>Amazon FSx</strong> (Windows/Lustre).
+    </p>
+
+    <h2>3. Database Services</h2>
+
+    <h3>Cloud SQL &rarr; Amazon RDS</h3>
+    <p>
+        Both are managed relational database services supporting MySQL, PostgreSQL, and SQL Server. Migration is
+        generally straightforward using <strong>AWS Database Migration Service (DMS)</strong> with minimal
+        downtime. Key difference: AWS RDS supports <strong>Aurora</strong>, a proprietary engine with up to
+        <strong>5x throughput over standard MySQL</strong> and 3x over PostgreSQL. Aurora has no GCP equivalent
+        and can be a compelling upgrade target during migration.
+    </p>
+
+    <h3>BigQuery &rarr; Amazon Redshift</h3>
+
+    <div class="callout callout-warning">
+        <div class="callout-title">High-Complexity Migration: BigQuery to Redshift</div>
+        <p>
+            The BigQuery-to-Redshift migration is consistently rated as the <strong>most complex service
+            transition</strong> in a GCP-to-AWS move. BigQuery is a serverless, auto-scaling analytics engine
+            that separates storage and compute completely. Redshift is a provisioned cluster-based warehouse
+            (though Redshift Serverless is now available). Key challenges include:
+        </p>
+        <ul>
+            <li><strong>SQL dialect differences:</strong> BigQuery SQL uses backtick quoting, <code>STRUCT</code>
+                and <code>ARRAY</code> types natively, and <code>UNNEST()</code> syntax that has no direct Redshift
+                equivalent.</li>
+            <li><strong>Nested/repeated fields:</strong> BigQuery natively supports nested and repeated columns.
+                Redshift requires flattening data into normalized tables or using <code>SUPER</code> semi-structured
+                data type.</li>
+            <li><strong>Pricing model shift:</strong> BigQuery charges per query (on-demand) or flat-rate slots.
+                Redshift charges per node-hour. Cost predictability changes fundamentally.</li>
+            <li><strong>Scheduled queries &amp; views:</strong> BigQuery scheduled queries, materialized views,
+                and BI Engine caching must be re-implemented using Redshift Scheduled Queries, materialized views,
+                and AQUA (Advanced Query Accelerator).</li>
+        </ul>
+        <p>
+            Plan for <strong>4&ndash;8 weeks of dedicated effort</strong> for a mid-size BigQuery deployment
+            (10&ndash;50 TB). Engage AWS specialists or a migration partner for datasets exceeding 100 TB.
+        </p>
+    </div>
+
+    <h3>Cloud Spanner &rarr; Amazon Aurora (Global Database)</h3>
+    <p>
+        Cloud Spanner is a globally distributed, strongly consistent relational database. AWS has no exact
+        equivalent. <strong>Amazon Aurora Global Database</strong> provides cross-region replication with
+        sub-second latency but does not offer the same level of global strong consistency. For workloads requiring
+        Spanner-like semantics, consider <strong>Amazon DynamoDB Global Tables</strong> (eventually consistent)
+        or retaining Spanner as a multi-cloud component.
+    </p>
+
+    <h3>Firestore &rarr; Amazon DynamoDB</h3>
+    <p>
+        Both are serverless NoSQL document databases. DynamoDB uses a partition-key/sort-key model, while Firestore
+        uses a hierarchical document/collection model. Data model translation requires careful planning: Firestore's
+        subcollections must be flattened into DynamoDB items with composite keys or managed via
+        <strong>single-table design patterns</strong>.
+    </p>
+
+    <h2>4. Networking</h2>
+
+    <h3>VPC Architecture: Global vs. Regional</h3>
+    <p>
+        This is one of the most significant architectural differences between the two platforms. GCP VPCs are
+        <strong>global resources</strong>&mdash;a single VPC spans all regions, and subnets are regional. AWS VPCs
+        are <strong>regional resources</strong>&mdash;each VPC exists within a single region, and cross-region
+        connectivity requires <strong>VPC Peering</strong> or <strong>AWS Transit Gateway</strong>. Organizations
+        accustomed to GCP's global VPC model must redesign their network topology for AWS, typically adopting a
+        <strong>hub-and-spoke architecture</strong> with Transit Gateway as the central router.
+    </p>
+
+    <h3>Cloud Load Balancing &rarr; ELB / ALB / NLB</h3>
+    <p>
+        GCP provides a single, unified load-balancing service that handles HTTP(S), TCP, UDP, and SSL traffic
+        with global anycast IPs. AWS separates load balancers into three products:
+    </p>
+    <ul>
+        <li><strong>Application Load Balancer (ALB):</strong> Layer 7, HTTP/HTTPS, path-based and host-based
+            routing. Maps to GCP HTTP(S) Load Balancer.</li>
+        <li><strong>Network Load Balancer (NLB):</strong> Layer 4, ultra-low latency, static IPs.
+            Maps to GCP TCP/UDP Load Balancer.</li>
+        <li><strong>Gateway Load Balancer (GWLB):</strong> For inline virtual appliances (firewalls, IDS/IPS).
+            No direct GCP equivalent.</li>
+    </ul>
+
+    <h2>5. Identity and Access Management (IAM)</h2>
+
+    <p>
+        GCP IAM uses a <strong>resource hierarchy</strong> model: Organization &rarr; Folders &rarr; Projects &rarr;
+        Resources. Policies are inherited downward and can be set at any level. AWS IAM uses an
+        <strong>account-based</strong> model where each AWS account is an isolation boundary. Multi-account governance
+        is achieved through <strong>AWS Organizations</strong> with <strong>Service Control Policies (SCPs)</strong>
+        that set permission guardrails across accounts.
+    </p>
+
+    <pre><code>// Example: AWS SCP denying all actions outside approved regions
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyOutsideApprovedRegions",
+      "Effect": "Deny",
+      "NotAction": [
+        "iam:*",
+        "organizations:*",
+        "support:*",
+        "sts:*"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringNotEquals": {
+          "aws:RequestedRegion": [
+            "us-east-1",
+            "us-west-2",
+            "eu-west-1"
+          ]
+        }
+      }
+    }
+  ]
+}</code></pre>
+
+    <p>
+        The mapping of GCP service accounts to AWS IAM roles is conceptually similar but operationally different.
+        GCP service accounts are resources that live in projects; AWS IAM roles are account-level resources assumed
+        via <code>sts:AssumeRole</code>. Cross-account access patterns on AWS require explicit trust policies,
+        while GCP uses IAM bindings across the resource hierarchy.
+    </p>
+
+    <h2>6. Comprehensive Service Mapping Table</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>GCP Service</th>
+                <th>AWS Equivalent</th>
+                <th>Migration Complexity</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Compute &mdash; VMs</td>
+                <td>Compute Engine (GCE)</td>
+                <td>EC2</td>
+                <td>Low&ndash;Medium</td>
+            </tr>
+            <tr>
+                <td>Compute &mdash; Containers</td>
+                <td>GKE</td>
+                <td>EKS</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>Compute &mdash; Serverless</td>
+                <td>Cloud Functions</td>
+                <td>Lambda</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>Compute &mdash; Containers (Serverless)</td>
+                <td>Cloud Run</td>
+                <td>Fargate / App Runner</td>
+                <td>Low&ndash;Medium</td>
+            </tr>
+            <tr>
+                <td>Compute &mdash; PaaS</td>
+                <td>App Engine</td>
+                <td>Elastic Beanstalk</td>
+                <td>Medium&ndash;High</td>
+            </tr>
+            <tr>
+                <td>Storage &mdash; Object</td>
+                <td>Cloud Storage</td>
+                <td>S3</td>
+                <td>Low</td>
+            </tr>
+            <tr>
+                <td>Storage &mdash; Block</td>
+                <td>Persistent Disk</td>
+                <td>EBS</td>
+                <td>Low</td>
+            </tr>
+            <tr>
+                <td>Storage &mdash; File</td>
+                <td>Filestore</td>
+                <td>EFS / FSx</td>
+                <td>Low</td>
+            </tr>
+            <tr>
+                <td>Database &mdash; Relational</td>
+                <td>Cloud SQL</td>
+                <td>RDS / Aurora</td>
+                <td>Low&ndash;Medium</td>
+            </tr>
+            <tr>
+                <td>Database &mdash; Analytics</td>
+                <td>BigQuery</td>
+                <td>Redshift / Athena</td>
+                <td>High</td>
+            </tr>
+            <tr>
+                <td>Database &mdash; NoSQL</td>
+                <td>Firestore</td>
+                <td>DynamoDB</td>
+                <td>Medium&ndash;High</td>
+            </tr>
+            <tr>
+                <td>Database &mdash; Global Relational</td>
+                <td>Cloud Spanner</td>
+                <td>Aurora Global Database</td>
+                <td>High</td>
+            </tr>
+            <tr>
+                <td>Database &mdash; Cache</td>
+                <td>Memorystore</td>
+                <td>ElastiCache</td>
+                <td>Low</td>
+            </tr>
+            <tr>
+                <td>Networking &mdash; VPC</td>
+                <td>VPC (Global)</td>
+                <td>VPC (Regional)</td>
+                <td>Medium&ndash;High</td>
+            </tr>
+            <tr>
+                <td>Networking &mdash; Load Balancing</td>
+                <td>Cloud Load Balancing</td>
+                <td>ALB / NLB / GWLB</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>Networking &mdash; DNS</td>
+                <td>Cloud DNS</td>
+                <td>Route 53</td>
+                <td>Low</td>
+            </tr>
+            <tr>
+                <td>Networking &mdash; CDN</td>
+                <td>Cloud CDN</td>
+                <td>CloudFront</td>
+                <td>Low</td>
+            </tr>
+            <tr>
+                <td>Networking &mdash; Interconnect</td>
+                <td>Cloud Interconnect</td>
+                <td>Direct Connect</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>IAM</td>
+                <td>Cloud IAM</td>
+                <td>IAM + Organizations + SCPs</td>
+                <td>Medium&ndash;High</td>
+            </tr>
+            <tr>
+                <td>Messaging</td>
+                <td>Pub/Sub</td>
+                <td>SNS + SQS / Kinesis</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>CI/CD</td>
+                <td>Cloud Build</td>
+                <td>CodePipeline + CodeBuild</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>Monitoring</td>
+                <td>Cloud Monitoring</td>
+                <td>CloudWatch</td>
+                <td>Medium</td>
+            </tr>
+            <tr>
+                <td>Logging</td>
+                <td>Cloud Logging</td>
+                <td>CloudWatch Logs</td>
+                <td>Low&ndash;Medium</td>
+            </tr>
+            <tr>
+                <td>ML Platform</td>
+                <td>Vertex AI</td>
+                <td>SageMaker</td>
+                <td>High</td>
+            </tr>
+            <tr>
+                <td>Data Pipeline</td>
+                <td>Dataflow (Apache Beam)</td>
+                <td>Kinesis Data Analytics / Glue</td>
+                <td>High</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="callout callout-tip">
+        <div class="callout-title">Migration Shortcut: Start with Low-Complexity Services</div>
+        <p>
+            Services rated "Low" complexity&mdash;such as Cloud Storage to S3, Cloud DNS to Route 53, and
+            Memorystore to ElastiCache&mdash;are ideal candidates for your pilot migration wave. Early wins
+            build team confidence and validate your migration playbook before tackling high-complexity services
+            like BigQuery or Spanner.
+        </p>
+    </div>
+
+    <hr>
+
+    <div class="key-takeaways">
+        <h3>Key Takeaways</h3>
+        <ul>
+            <li>Service mapping is not a 1:1 exercise. Each GCP service maps to one or more AWS equivalents with
+                distinct configuration, pricing, and operational models.</li>
+            <li>AWS EC2 offers 475+ instance types compared to GCP's 50+ machine types, providing finer-grained
+                optimization but requiring more careful instance selection.</li>
+            <li>Storage tier granularity favors AWS: S3 has 7 storage classes vs. Cloud Storage's 4, enabling
+                more precise cost optimization for varied data lifecycle patterns.</li>
+            <li>BigQuery to Redshift is the highest-complexity migration in the GCP-to-AWS journey. Plan for
+                SQL dialect translation, nested data flattening, and pricing model redesign.</li>
+            <li>GCP's global VPC model vs. AWS's regional VPC model is a fundamental architectural difference
+                that requires network topology redesign, typically using Transit Gateway.</li>
+            <li>IAM translation requires moving from GCP's resource-hierarchy model to AWS's account-based
+                model with Organizations and Service Control Policies (SCPs).</li>
+        </ul>
+    </div>
+
+</body>
+</html>

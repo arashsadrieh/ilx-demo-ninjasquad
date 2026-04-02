@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infrastructure-as-Code Conversion and Environment Provisioning</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+
+<span class="module-badge">Module 2 &mdash; Lesson 1</span>
+<h1>Infrastructure-as-Code Conversion and Environment Provisioning</h1>
+<p class="reading-time">8 min read</p>
+
+<p>
+    Migrating cloud infrastructure between providers is far more than a lift-and-shift exercise. The underlying
+    primitives&mdash;networking constructs, security policies, resource naming conventions, and provisioning
+    APIs&mdash;differ fundamentally between Google Cloud Platform and Amazon Web Services. In this lesson, we examine how
+    Infrastructure-as-Code (IaC) tooling provides the automation backbone for a reliable, repeatable, and auditable
+    migration from GCP to AWS. We will walk through provider conversions, networking architecture translation, and
+    security configuration best practices that form the foundation of your target-state environment.
+</p>
+
+<h2>1. The Terraform Multi-Cloud Advantage</h2>
+
+<p>
+    According to the <strong>HashiCorp 2023 State of Cloud Strategy Survey</strong>, <strong>76% of enterprises</strong>
+    now use Terraform as their primary IaC tool for multi-cloud provisioning. This dominance is not accidental. Terraform's
+    provider-based architecture allows engineering teams to express infrastructure intent in a single declarative language
+    (HCL) while targeting any cloud API through swappable provider plugins.
+</p>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-value">76%</div>
+        <div class="stat-label">Enterprises using Terraform (HashiCorp 2023)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">3,000+</div>
+        <div class="stat-label">Available Terraform providers</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">40%</div>
+        <div class="stat-label">Faster provisioning vs manual</div>
+    </div>
+</div>
+
+<p>
+    For organizations currently using GCP's <strong>Deployment Manager</strong>, the migration to AWS presents an
+    additional conversion step. Deployment Manager templates (written in YAML or Jinja2/Python) have no direct equivalent
+    in AWS. While AWS CloudFormation serves a similar purpose, the template syntax, intrinsic functions, and resource type
+    schemas are entirely different. <strong>There is no automated converter between Deployment Manager and
+    CloudFormation</strong>&mdash;manual effort is required for every template. This is a primary reason we recommend
+    consolidating on Terraform before beginning the migration, as it decouples your IaC definitions from any single
+    provider's proprietary tooling.
+</p>
+
+<h2>2. Terraform Provider Block Conversion</h2>
+
+<p>
+    The most fundamental change in a GCP-to-AWS Terraform migration is the provider block itself. Every resource
+    definition must be re-mapped from <code>google_*</code> resource types to their <code>aws_*</code> equivalents. Below
+    is a side-by-side comparison that illustrates the scope of this change.
+</p>
+
+<h3>GCP Provider and Compute Instance</h3>
+<pre><code># GCP Terraform Configuration
+provider "google" {
+  project = "my-gcp-project-id"
+  region  = "us-central1"
+  zone    = "us-central1-a"
+}
+
+resource "google_compute_instance" "app_server" {
+  name         = "app-server-01"
+  machine_type = "e2-standard-4"
+  zone         = "us-central1-a"
+
+  boot_disk {
+    initialize_params {
+      image = "debian-cloud/debian-11"
+      size  = 50
+    }
+  }
+
+  network_interface {
+    network    = google_compute_network.main.id
+    subnetwork = google_compute_subnetwork.private.id
+  }
+
+  tags = ["app-server", "http-server"]
+}</code></pre>
+
+<h3>AWS Provider and EC2 Instance (Equivalent)</h3>
+<pre><code># AWS Terraform Configuration
+provider "aws" {
+  region  = "us-east-1"
+  profile = "migration-admin"
+}
+
+resource "aws_instance" "app_server" {
+  ami           = "ami-0c55b159cbfafe1f0"  # Debian 11
+  instance_type = "m5.xlarge"
+
+  subnet_id              = aws_subnet.private[0].id
+  vpc_security_group_ids = [aws_security_group.app_tier.id]
+
+  root_block_device {
+    volume_size = 50
+    volume_type = "gp3"
+  }
+
+  tags = {
+    Name = "app-server-01"
+    Tier = "application"
+  }
+}</code></pre>
+
+<p>
+    Key differences to note: GCP uses <code>project</code> scoping while AWS uses <code>region</code> and IAM
+    <code>profile</code> scoping. GCP assigns firewall rules via network tags, whereas AWS uses explicit security group
+    associations. Machine type naming conventions also differ&mdash;GCP's <code>e2-standard-4</code> maps approximately
+    to AWS's <code>m5.xlarge</code> (4 vCPUs, 16 GB RAM).
+</p>
+
+<h2>3. Networking: GCP Global VPC to AWS Regional VPC</h2>
+
+<div class="callout callout-warning">
+    <div class="callout-title">Warning: Architectural Paradigm Shift</div>
+    <p>
+        GCP Virtual Private Clouds are <strong>global resources</strong>&mdash;a single VPC spans all regions, and
+        subnets are regional. AWS VPCs, by contrast, are <strong>strictly regional</strong>. A single GCP global VPC may
+        need to be decomposed into multiple AWS VPCs (one per region), connected via VPC Peering or AWS Transit Gateway.
+        Failing to account for this difference is one of the most common and costly architectural mistakes in
+        cross-cloud migrations.
+    </p>
+</div>
+
+<p>
+    The target-state AWS networking architecture should follow AWS Well-Architected Framework recommendations. For a
+    production workload, the minimum viable VPC design includes:
+</p>
+
+<ul>
+    <li><strong>CIDR block:</strong> A <code>/16</code> VPC CIDR (e.g., <code>10.0.0.0/16</code>) providing 65,536 IP addresses</li>
+    <li><strong>Subnets:</strong> <code>/24</code> subnets (256 addresses each), with both public and private subnets in a minimum of <strong>3 Availability Zones</strong> for high availability</li>
+    <li><strong>Internet Gateway:</strong> Attached to the VPC for public subnet egress/ingress</li>
+    <li><strong>NAT Gateways:</strong> One per AZ in public subnets, providing outbound internet access for private subnets without exposing them to inbound traffic</li>
+    <li><strong>Route tables:</strong> Separate route tables for public subnets (default route to IGW) and private subnets (default route to NAT Gateway)</li>
+</ul>
+
+<h3>Terraform AWS VPC Example</h3>
+<pre><code># AWS VPC with Multi-AZ Subnet Layout
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = { Name = "migration-vpc-prod" }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.main.id
+  tags   = { Name = "migration-igw" }
+}
+
+# Public subnets across 3 AZs
+resource "aws_subnet" "public" {
+  count                   = 3
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = cidrsubnet("10.0.0.0/16", 8, count.index)
+  availability_zone       = data.aws_availability_zones.az.names[count.index]
+  map_public_ip_on_launch = true
+
+  tags = { Name = "public-${data.aws_availability_zones.az.names[count.index]}" }
+}
+
+# Private subnets across 3 AZs
+resource "aws_subnet" "private" {
+  count             = 3
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = cidrsubnet("10.0.0.0/16", 8, count.index + 10)
+  availability_zone = data.aws_availability_zones.az.names[count.index]
+
+  tags = { Name = "private-${data.aws_availability_zones.az.names[count.index]}" }
+}
+
+# NAT Gateway (one per AZ for HA)
+resource "aws_eip" "nat" {
+  count  = 3
+  domain = "vpc"
+}
+
+resource "aws_nat_gateway" "nat" {
+  count         = 3
+  allocation_id = aws_eip.nat[count.index].id
+  subnet_id     = aws_subnet.public[count.index].id
+
+  tags = { Name = "nat-${data.aws_availability_zones.az.names[count.index]}" }
+}</code></pre>
+
+<h2>4. Security Groups vs. GCP Firewall Rules</h2>
+
+<p>
+    GCP firewall rules are applied at the VPC network level and target instances via network tags or service accounts.
+    AWS security groups are <strong>stateful</strong>, <strong>VPC-specific</strong> firewalls attached directly to
+    elastic network interfaces (ENIs). The stateful nature means that return traffic for an allowed inbound rule is
+    automatically permitted&mdash;no explicit outbound rule is needed for response packets.
+</p>
+
+<p>
+    A well-designed AWS security group hierarchy for a migrated application typically follows a three-tier model:
+</p>
+
+<table>
+    <thead>
+        <tr>
+            <th>Security Group</th>
+            <th>Inbound Rules</th>
+            <th>Source</th>
+            <th>Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><strong>Bastion SG</strong></td>
+            <td>TCP 443 (SSM)</td>
+            <td>VPC Endpoints</td>
+            <td>Administrative access via Session Manager</td>
+        </tr>
+        <tr>
+            <td><strong>Application Tier SG</strong></td>
+            <td>TCP 8080, 443</td>
+            <td>ALB Security Group</td>
+            <td>Receives traffic from load balancer only</td>
+        </tr>
+        <tr>
+            <td><strong>Database Tier SG</strong></td>
+            <td>TCP 5432 (PostgreSQL)</td>
+            <td>Application Tier SG</td>
+            <td>Accepts connections only from app servers</td>
+        </tr>
+    </tbody>
+</table>
+
+<p>
+    This layered approach ensures that each tier can only communicate with its adjacent tier, implementing the principle
+    of least privilege at the network level.
+</p>
+
+<h2>5. Replacing SSH with AWS Systems Manager Session Manager</h2>
+
+<p>
+    A critical security improvement during migration is eliminating direct SSH access to instances. <strong>AWS Systems
+    Manager Session Manager</strong> provides encrypted, audited shell access without opening inbound SSH ports (TCP 22).
+    According to AWS security benchmarks, this approach reduces the <strong>attack surface by approximately 40%</strong>
+    compared to traditional bastion-host-with-SSH architectures.
+</p>
+
+<p>Session Manager advantages over SSH-based access:</p>
+<ul>
+    <li><strong>No inbound ports required</strong>&mdash;instances initiate outbound connections to SSM endpoints</li>
+    <li><strong>Full session logging</strong> to CloudWatch Logs and S3 for compliance auditing</li>
+    <li><strong>IAM-based access control</strong>&mdash;no SSH key distribution or rotation overhead</li>
+    <li><strong>Centralized access management</strong> through IAM policies and AWS Organizations SCPs</li>
+    <li><strong>Session recording</strong> for forensic analysis and change management evidence</li>
+</ul>
+
+<p>
+    To enable Session Manager, instances require the SSM Agent (pre-installed on Amazon Linux 2 and recent Ubuntu AMIs),
+    an instance profile with the <code>AmazonSSMManagedInstanceCore</code> managed policy, and VPC endpoints for
+    <code>ssm</code>, <code>ssmmessages</code>, and <code>ec2messages</code> services (or NAT Gateway egress).
+</p>
+
+<hr>
+
+<div class="key-takeaways">
+    <h3>Key Takeaways</h3>
+    <ul>
+        <li>Terraform's provider-based architecture makes it the ideal IaC tool for cross-cloud migration, with 76% enterprise adoption (HashiCorp 2023). Consolidate on Terraform before migrating to avoid manual Deployment Manager-to-CloudFormation conversion.</li>
+        <li>GCP's global VPC model must be decomposed into AWS regional VPCs&mdash;this is a fundamental architectural change that affects subnet design, routing, and inter-region connectivity.</li>
+        <li>Design AWS VPCs with a <code>/16</code> CIDR block, <code>/24</code> subnets across a minimum of 3 Availability Zones, with Internet Gateways for public subnets and NAT Gateways for private subnet egress.</li>
+        <li>AWS security groups are stateful and VPC-specific. Implement a three-tier hierarchy (bastion, application, database) following the principle of least privilege.</li>
+        <li>Replace SSH with AWS Systems Manager Session Manager to reduce attack surface by approximately 40%, eliminate inbound port requirements, and gain centralized IAM-based access control with full audit logging.</li>
+    </ul>
+</div>
+
+</body>
+</html>
