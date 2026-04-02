@@ -2,19 +2,14 @@
 
 ## Session Log
 - **2026-04-02 Session 1**: First wake-up. Completed onboarding. Waited for Nova to create PRD.
-- **2026-04-02 Session 2**: PRD drafted by Nova (SCORM 1.2 course package for Cloud Migration GCP→AWS). Issue #1 assigned (Design: SCORM Course UI/UX). Studied SCORM example package structure. Designed and delivered all design deliverables:
-  - Course shell layout (launchpage.html) with sidebar TOC, content iframe, navigation
-  - Full CSS design system (style.css) — 600+ lines, enterprise blues/grays
-  - Lesson page template (lesson1.html) with tables, code blocks, callouts, key takeaways
-  - Quiz/assessment page with question cards, answer options, score results
-  - SCORM 1.2 API wrapper (scormfunctions.js)
-  - 4 AI-generated images (3 module banners + 1 course banner)
-  - Committed and pushed to main. GitHub issue #1 commented with full deliverables.
+- **2026-04-02 Session 2**: PRD drafted by Nova (SCORM 1.2 course package for Cloud Migration GCP→AWS). Issue #1 assigned (Design: SCORM Course UI/UX). Studied SCORM example package structure. Designed and delivered all design deliverables. Committed and pushed to main.
+- **2026-04-02 Session 3**: Reviewed Bolt's PR #21. Core layout/UX is solid. Key feedback: module images not used in lesson pages or manifest. Minor: color palette drift (#4f8ff7 vs my #1a56db), inline styles in launchpage. Posted review on PR and Slack. Stakeholder requested Moodle LMS testing (issue #22).
 
 ## Current Design Tasks
 | Task | Status | Priority |
 |------|--------|----------|
 | Issue #1: SCORM Course UI/UX Design | Complete | P0 |
+| PR #21 Design Review | Complete | P0 |
 
 ## Design System
 ### Colors
@@ -48,13 +43,20 @@
 ## Handoff Status
 | Design | Handed to Bolt | Implemented | Reviewed |
 |--------|----------------|-------------|----------|
-| launchpage.html | Pending | — | — |
-| style.css | Pending | — | — |
-| lesson1.html (template) | Pending | — | — |
-| assessmenttemplate.html | Pending | — | — |
-| Module images (4x) | Pending | — | — |
+| launchpage.html | Yes | Yes (modified) | Reviewed — inline styles, color drift |
+| style.css | Yes | Yes (rewritten) | Reviewed — good structure, minor palette diff |
+| lesson template | Yes | Yes (8 lessons) | Reviewed — solid content, missing images |
+| assessment page | Yes | Yes (quiz.html) | Reviewed — good quiz cards and scoring |
+| Module images (4x) | Yes | NOT USED | Flagged — must-fix in PR review |
+
+## PR #21 Review Summary
+- Core UX correct: sidebar TOC, content iframe, prev/next nav, progress bar
+- Good additions: stat grid cards, sidebar toggle, module badges, reading time
+- Must-fix: Module banner images not included in lesson pages or manifest
+- Nice-to-have: Align color palette to design tokens, extract inline styles
+- Verdict: Approve after images are added
 
 ## Pending Items
-- Review Bolt's implementation against designs when ready
-- May need to iterate on responsive behavior within LMS iframes
-- Quiz question bank JS files (Module1/questions.js etc.) need to be created by Bolt
+- Wait for Bolt to address image feedback and update PR
+- Review final package after Moodle LMS testing (issue #22)
+- May need to review Moodle UI rendering for LMS-specific quirks
