@@ -1,0 +1,229 @@
+/*
+ * Course Content Stylesheet
+ * Cloud Computing: Multi-Cloud Migration Strategy — GCP to AWS
+ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #1f2937;
+    background: #ffffff;
+    padding: 32px 40px 60px;
+    max-width: 860px;
+    margin: 0 auto;
+}
+
+/* Headings */
+h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: #111827;
+    margin-bottom: 8px;
+    line-height: 1.3;
+}
+h2 {
+    font-size: 22px;
+    font-weight: 600;
+    color: #1e3a5f;
+    margin-top: 36px;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #e5e7eb;
+}
+h3 {
+    font-size: 17px;
+    font-weight: 600;
+    color: #374151;
+    margin-top: 24px;
+    margin-bottom: 8px;
+}
+
+/* Module badge */
+.module-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 4px;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+/* Estimated reading time */
+.reading-time {
+    font-size: 13px;
+    color: #9ca3af;
+    margin-bottom: 24px;
+}
+
+p {
+    margin-bottom: 14px;
+}
+
+/* Lists */
+ul, ol {
+    margin: 12px 0 16px 24px;
+}
+li {
+    margin-bottom: 6px;
+}
+li > ul, li > ol {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+/* Links */
+a { color: #2563eb; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0 20px;
+    font-size: 14px;
+    background: #fafbfc;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    overflow: hidden;
+}
+thead th {
+    background: #1e3a5f;
+    color: #ffffff;
+    font-weight: 600;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+tbody td {
+    padding: 10px 14px;
+    border-bottom: 1px solid #e5e7eb;
+    vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover { background: #f0f4ff; }
+
+/* Code blocks */
+pre {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 16px 20px;
+    border-radius: 8px;
+    font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    overflow-x: auto;
+    margin: 16px 0 20px;
+}
+code {
+    font-family: "SF Mono", "Fira Code", "Fira Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    background: #f1f5f9;
+    color: #be185d;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+pre code {
+    background: none;
+    color: inherit;
+    padding: 0;
+}
+
+/* Callout boxes */
+.callout {
+    padding: 16px 20px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border-left: 4px solid;
+}
+.callout-info {
+    background: #eff6ff;
+    border-color: #3b82f6;
+}
+.callout-tip {
+    background: #f0fdf4;
+    border-color: #22c55e;
+}
+.callout-warning {
+    background: #fffbeb;
+    border-color: #f59e0b;
+}
+.callout-important {
+    background: #fef2f2;
+    border-color: #ef4444;
+}
+.callout-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+.callout p { margin-bottom: 6px; }
+.callout p:last-child { margin-bottom: 0; }
+
+/* Key takeaways */
+.key-takeaways {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-top: 32px;
+}
+.key-takeaways h3 {
+    margin-top: 0;
+    color: #1e3a5f;
+    font-size: 16px;
+}
+.key-takeaways ul {
+    margin-bottom: 0;
+}
+
+/* Stats / metrics */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin: 16px 0 20px;
+}
+.stat-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+}
+.stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e3a5f;
+}
+.stat-label {
+    font-size: 12px;
+    color: #6b7280;
+    margin-top: 2px;
+}
+
+/* Strong emphasis */
+strong { font-weight: 600; }
+
+/* Horizontal rule */
+hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 28px 0;
+}
+
+/* Image styling */
+img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    margin: 12px 0;
+}

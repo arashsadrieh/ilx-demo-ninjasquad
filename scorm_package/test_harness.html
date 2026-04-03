@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SCORM 1.2 Test Harness — GCP to AWS Migration</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; height: 100vh; display: flex; flex-direction: column; }
+header { background: #1e293b; padding: 10px 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1a56db; }
+header h1 { font-size: 14px; color: #93c5fd; }
+header .badge { background: #1a56db; color: #fff; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.main { display: flex; flex: 1; overflow: hidden; }
+.content-frame { flex: 1; }
+.content-frame iframe { width: 100%; height: 100%; border: none; background: #fff; }
+.monitor { width: 320px; background: #1e293b; border-left: 1px solid #334155; overflow-y: auto; padding: 12px; font-size: 12px; }
+.monitor h2 { font-size: 13px; color: #93c5fd; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid #334155; }
+.monitor .section { margin-bottom: 12px; }
+.monitor .section h3 { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.monitor .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #1e293b; }
+.monitor .row:hover { background: #334155; }
+.monitor .label { color: #94a3b8; }
+.monitor .value { color: #f1f5f9; font-family: monospace; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.monitor .value.changed { color: #4ade80; font-weight: 600; }
+.log { max-height: 200px; overflow-y: auto; background: #0f172a; border-radius: 4px; padding: 6px; margin-top: 8px; }
+.log .entry { padding: 2px 0; border-bottom: 1px solid #1e293b; font-family: monospace; font-size: 11px; }
+.log .entry.init { color: #4ade80; }
+.log .entry.set { color: #60a5fa; }
+.log .entry.get { color: #94a3b8; }
+.log .entry.commit { color: #fbbf24; }
+.log .entry.finish { color: #f87171; }
+.log .entry.error { color: #ef4444; }
+footer { background: #1e293b; padding: 6px 20px; font-size: 11px; color: #64748b; text-align: center; border-top: 1px solid #334155; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SCORM 1.2 Test Harness</h1>
+  <span class="badge">scorm-again runtime</span>
+</header>
+
+<div class="main">
+  <div class="content-frame">
+    <iframe id="scoFrame" src="shared/launchpage.html"></iframe>
+  </div>
+  <div class="monitor" id="monitor">
+    <h2>SCORM Data Monitor</h2>
+    <div class="section" id="coreSection">
+      <h3>Core</h3>
+    </div>
+    <div class="section" id="scoreSection">
+      <h3>Score</h3>
+    </div>
+    <div class="section" id="logSection">
+      <h3>API Call Log</h3>
+      <div class="log" id="apiLog"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  Ninja Academy — SCORM 1.2 Test Environment (no LMS backend — data logged to console)
+</footer>
+
+<script src="../node_modules/scorm-again/dist/scorm12.js"></script>
+<script>
+(function() {
+  // Initialize SCORM 1.2 API via scorm-again
+  var api = new Scorm12API({
+    autocommit: false,
+    logLevel: 4, // DEBUG
+    selfReportSessionTime: false
+  });
+
+  // Expose as window.API for ADL discovery (SCORM 1.2 pattern)
+  window.API = api;
+
+  // --- Monitor UI ---
+  var coreFields = [
+    'cmi.core.student_id',
+    'cmi.core.student_name',
+    'cmi.core.lesson_status',
+    'cmi.core.lesson_location',
+    'cmi.core.credit',
+    'cmi.core.entry',
+    'cmi.core.exit',
+    'cmi.core.session_time',
+    'cmi.core.total_time',
+    'cmi.suspend_data'
+  ];
+  var scoreFields = [
+    'cmi.core.score.raw',
+    'cmi.core.score.min',
+    'cmi.core.score.max'
+  ];
+
+  var prevValues = {};
+  var coreSection = document.getElementById('coreSection');
+  var scoreSection = document.getElementById('scoreSection');
+  var apiLog = document.getElementById('apiLog');
+
+  function shortName(field) {
+    return field.replace('cmi.core.', '').replace('cmi.', '');
+  }
+
+  function buildRows(section, fields) {
+    fields.forEach(function(f) {
+      var row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = '<span class="label">' + shortName(f) + '</span><span class="value" id="val_' + f.replace(/\./g, '_') + '">—</span>';
+      section.appendChild(row);
+    });
+  }
+
+  buildRows(coreSection, coreFields);
+  buildRows(scoreSection, scoreFields);
+
+  function refreshMonitor() {
+    var allFields = coreFields.concat(scoreFields);
+    allFields.forEach(function(f) {
+      var val;
+      try { val = api.lmsGetValue(f); } catch(e) { val = ''; }
+      var el = document.getElementById('val_' + f.replace(/\./g, '_'));
+      if (el) {
+        el.textContent = val || '—';
+        if (prevValues[f] !== val && prevValues[f] !== undefined) {
+          el.classList.add('changed');
+          setTimeout(function() { el.classList.remove('changed'); }, 1500);
+        }
+        prevValues[f] = val;
+      }
+    });
+  }
+
+  function addLogEntry(type, msg) {
+    var entry = document.createElement('div');
+    entry.className = 'entry ' + type;
+    var time = new Date().toLocaleTimeString();
+    entry.textContent = '[' + time + '] ' + msg;
+    apiLog.insertBefore(entry, apiLog.firstChild);
+    // Keep log manageable
+    while (apiLog.children.length > 100) {
+      apiLog.removeChild(apiLog.lastChild);
+    }
+  }
+
+  // Listen for scorm-again events (event names without LMS prefix)
+  api.on('Initialize', function() {
+    addLogEntry('init', 'LMSInitialize()');
+    refreshMonitor();
+  });
+
+  api.on('SetValue', function(element, value) {
+    addLogEntry('set', 'SetValue(' + (element || '') + ', ' + (value || '') + ')');
+    refreshMonitor();
+  });
+
+  api.on('GetValue', function(element) {
+    addLogEntry('get', 'GetValue(' + (element || '') + ')');
+  });
+
+  api.on('Commit', function() {
+    addLogEntry('commit', 'LMSCommit()');
+    refreshMonitor();
+  });
+
+  api.on('Finish', function() {
+    addLogEntry('finish', 'LMSFinish()');
+    refreshMonitor();
+  });
+
+  // Refresh monitor periodically as a fallback
+  setInterval(refreshMonitor, 2000);
+
+  console.log('%c[SCORM Test Harness] API initialized. window.API is ready.', 'color: #4ade80; font-weight: bold;');
+})();
+</script>
+</body>
+</html>

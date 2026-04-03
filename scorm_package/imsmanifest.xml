@@ -1,0 +1,56 @@
+<?xml version="1.0" standalone="no" ?>
+<manifest identifier="com.ninjasquad.cloud-migration-gcp-to-aws" version="1"
+         xmlns="http://www.imsproject.org/xsd/imscp_rootv1p1p2"
+         xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://www.imsproject.org/xsd/imscp_rootv1p1p2 imscp_rootv1p1p2.xsd
+                             http://www.imsglobal.org/xsd/imsmd_rootv1p2p1 imsmd_rootv1p2p1.xsd
+                             http://www.adlnet.org/xsd/adlcp_rootv1p2 adlcp_rootv1p2.xsd">
+
+  <metadata>
+    <schema>ADL SCORM</schema>
+    <schemaversion>1.2</schemaversion>
+  </metadata>
+
+  <organizations default="org_cloud_migration">
+    <organization identifier="org_cloud_migration">
+      <title>Cloud Computing: Multi-Cloud Migration Strategy — GCP to AWS Platform Transition</title>
+      <item identifier="item_1" identifierref="resource_1">
+        <title>GCP to AWS Migration Course</title>
+      </item>
+    </organization>
+  </organizations>
+
+  <resources>
+    <resource identifier="resource_1" type="webcontent" adlcp:scormtype="sco" href="shared/launchpage.html">
+      <!-- Shared files -->
+      <file href="shared/launchpage.html"/>
+      <file href="shared/scormfunctions.js"/>
+      <file href="shared/style.css"/>
+
+      <!-- Module 1: Strategic Assessment and Service Mapping -->
+      <file href="module1/lesson1_1.html"/>
+      <file href="module1/lesson1_2.html"/>
+      <file href="module1/lesson1_3.html"/>
+
+      <!-- Module 2: Technical Migration Execution -->
+      <file href="module2/lesson2_1.html"/>
+      <file href="module2/lesson2_2.html"/>
+      <file href="module2/lesson2_3.html"/>
+
+      <!-- Module 3: Optimization and Operational Excellence -->
+      <file href="module3/lesson3_1.html"/>
+      <file href="module3/lesson3_2.html"/>
+
+      <!-- Assets -->
+      <file href="assets/images/course_banner.png"/>
+      <file href="assets/images/module1_banner.png"/>
+      <file href="assets/images/module2_banner.png"/>
+      <file href="assets/images/module3_banner.png"/>
+
+      <!-- Assessment -->
+      <file href="assessment/quiz.html"/>
+      <file href="assessment/questions.js"/>
+    </resource>
+  </resources>
+</manifest>
